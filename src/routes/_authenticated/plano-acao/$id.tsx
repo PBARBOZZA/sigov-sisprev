@@ -80,7 +80,7 @@ function AcaoDetalhes() {
     const file = e.target.files?.[0];
     if (!file || !user) return;
     setUploading(true);
-    const path = `${id}/${Date.now()}-${file.name}`;
+    const path = `${user.id}/${id}/${Date.now()}-${file.name}`;
     const { error: upErr } = await supabase.storage.from("evidencias").upload(path, file);
     if (upErr) { toast.error(upErr.message); setUploading(false); return; }
     const { error: insErr } = await supabase.from("evidencias").insert({
