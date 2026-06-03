@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Shield, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import sisprevLogo from "@/assets/sisprev-logo.png.asset.json";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/auth")({
@@ -70,9 +71,7 @@ function AuthPage() {
     <div className="min-h-screen grid lg:grid-cols-2">
       <div className="hidden lg:flex flex-col justify-between p-12 bg-sidebar text-sidebar-foreground">
         <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-            <Shield className="h-5 w-5" />
-          </div>
+          <img src={sisprevLogo.url} alt="SISPREV-TO" className="h-16 w-auto" />
           <div>
             <p className="text-lg font-semibold">SIGOV-SISPREV</p>
             <p className="text-xs text-sidebar-foreground/70">Governança Previdenciária</p>
@@ -93,9 +92,7 @@ function AuthPage() {
       <div className="flex items-center justify-center p-6">
         <Card className="w-full max-w-md p-6">
           <div className="lg:hidden flex items-center gap-3 mb-6">
-            <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary text-primary-foreground">
-              <Shield className="h-5 w-5" />
-            </div>
+            <img src={sisprevLogo.url} alt="SISPREV-TO" className="h-14 w-auto" />
             <div>
               <p className="font-semibold">SIGOV-SISPREV</p>
               <p className="text-xs text-muted-foreground">Governança Previdenciária</p>
