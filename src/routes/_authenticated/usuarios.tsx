@@ -37,7 +37,7 @@ function Usuarios() {
   const setRole = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
       await supabase.from("user_roles").delete().eq("user_id", userId);
-      const { error } = await supabase.from("user_roles").insert({ user_id: userId, role });
+      const { error } = await supabase.from("user_roles").insert({ user_id: userId, role: role as any });
       if (error) throw error;
     },
     onSuccess: () => { toast.success("Perfil atualizado"); qc.invalidateQueries({ queryKey: ["usuarios-list"] }); },
