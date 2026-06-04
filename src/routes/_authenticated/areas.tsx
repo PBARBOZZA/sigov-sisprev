@@ -27,7 +27,7 @@ function Areas() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["areas-list"],
-    queryFn: async () => (await supabase.from("areas").select("*, responsavel:profiles!areas_responsavel_id_fkey(id,nome)").order("nome")).data ?? [],
+    queryFn: async () => (await supabase.from("areas").select("*").order("nome")).data ?? [],
   });
 
   const { data: usuarios } = useQuery({
