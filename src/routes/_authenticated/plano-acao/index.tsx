@@ -138,15 +138,21 @@ function PlanoAcao() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <SelectField label="Programa" name="programa" options={PROGRAMAS.map(p => ({ value: p, label: p }))} />
                   <SelectField label="Eixo estratégico" name="eixo" options={EIXOS.map(e => ({ value: e, label: e }))} />
-                  <SelectField label="Área" name="area" options={(areas ?? []).map(a => ({ value: a.id, label: a.nome }))} />
-                  <SelectField label="Responsável" name="responsavel" options={(usuarios ?? []).map(u => ({ value: u.id, label: u.nome }))} />
+                  <SelectField label="Área *" name="area" options={(areas ?? []).map(a => ({ value: a.id, label: a.nome }))} />
+                  <SelectField label="Responsável (cadastrado)" name="responsavel" options={(usuarios ?? []).map(u => ({ value: u.id, label: u.nome }))} />
+                  <Field label="Responsável (texto livre)" name="responsavel_nome" placeholder="Use se não há cadastro" />
+                  <SelectField label="Periodicidade" name="periodicidade" options={PERIODICIDADES.map(p => ({ value: p, label: p }))} />
                   <Field label="Data início" name="data_inicio" type="date" />
                   <Field label="Prazo final" name="prazo_final" type="date" />
-                  <SelectField label="Status" name="status" defaultValue="nao_iniciada"
+                  <SelectField label="Status *" name="status" defaultValue="nao_iniciada"
                     options={Object.entries(STATUS_LABELS).map(([v, l]) => ({ value: v, label: l }))} />
                   <SelectField label="Prioridade" name="prioridade" defaultValue="media"
                     options={Object.entries(PRIORIDADE_LABELS).map(([v, l]) => ({ value: v, label: l }))} />
                   <Field label="% Execução" name="percentual" type="number" min={0} max={100} defaultValue="0" />
+                </div>
+                <div>
+                  <Label>Observações</Label>
+                  <Textarea name="observacoes" rows={2} />
                 </div>
                 <DialogFooter>
                   <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
@@ -174,6 +180,8 @@ function PlanoAcao() {
             placeholder="Eixo" options={[{ value: "all", label: "Todos eixos" }, ...EIXOS.map(e => ({ value: e, label: e }))]} />
           <SelectFilter value={filters.area} onChange={(v) => setFilters({ ...filters, area: v })}
             placeholder="Área" options={[{ value: "all", label: "Todas áreas" }, ...(areas ?? []).map(a => ({ value: a.id, label: a.nome }))]} />
+          <SelectFilter value={filters.responsavel} onChange={(v) => setFilters({ ...filters, responsavel: v })}
+            placeholder="Responsável" options={[{ value: "all", label: "Todos responsáveis" }, ...responsavelOptions.map(n => ({ value: n, label: n }))]} />
         </div>
       </Card>
 
@@ -205,7 +213,7 @@ function PlanoAcao() {
                         <p className="text-xs text-muted-foreground truncate max-w-md">{a.eixo_estrategico ?? "—"}</p>
                       </td>
                       <td className="px-3 py-2 text-xs">{(a as any).area?.nome ?? "—"}</td>
-                      <td className="px-3 py-2 text-xs">{(a as any).responsavel?.nome ?? "—"}</td>
+                      <td className="px-3 py-2 text-xs">{(a as any).responsavel?.nome ?? a.responsavel_nome ?? "—"}</td>
                       <td className="px-3 py-2 text-xs">
                         <div className="flex items-center gap-2">
                           <span>{fmtDate(a.prazo_final)}</span>
