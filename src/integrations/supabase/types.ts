@@ -26,11 +26,13 @@ export type Database = {
           objetivo: string | null
           observacoes: string | null
           percentual_execucao: number
+          periodicidade: string | null
           prazo_final: string | null
           prioridade: Database["public"]["Enums"]["acao_prioridade"]
           programa: string | null
           projeto: string | null
           responsavel_id: string | null
+          responsavel_nome: string | null
           status: Database["public"]["Enums"]["acao_status"]
           titulo: string
           updated_at: string
@@ -46,11 +48,13 @@ export type Database = {
           objetivo?: string | null
           observacoes?: string | null
           percentual_execucao?: number
+          periodicidade?: string | null
           prazo_final?: string | null
           prioridade?: Database["public"]["Enums"]["acao_prioridade"]
           programa?: string | null
           projeto?: string | null
           responsavel_id?: string | null
+          responsavel_nome?: string | null
           status?: Database["public"]["Enums"]["acao_status"]
           titulo: string
           updated_at?: string
@@ -66,11 +70,13 @@ export type Database = {
           objetivo?: string | null
           observacoes?: string | null
           percentual_execucao?: number
+          periodicidade?: string | null
           prazo_final?: string | null
           prioridade?: Database["public"]["Enums"]["acao_prioridade"]
           programa?: string | null
           projeto?: string | null
           responsavel_id?: string | null
+          responsavel_nome?: string | null
           status?: Database["public"]["Enums"]["acao_status"]
           titulo?: string
           updated_at?: string
