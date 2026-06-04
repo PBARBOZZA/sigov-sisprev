@@ -515,3 +515,27 @@ npm run format     # Prettier
 ```
 
 O `package.json` tambem e compativel com Bun, pois ha `bun.lock` e `bunfig.toml`.
+
+## 15. Atualizacao de seguranca - 04/06/2026
+
+Foram implementadas correcoes criticas de seguranca e controle de acesso registradas em `CORRECOES_SEGURANCA.md`.
+
+### Principais mudancas
+
+- Cadastro publico desabilitado na tela `/auth`.
+- Criacao de usuarios mantida apenas para administradores no modulo `Usuarios`.
+- Bloqueio de usuarios inativos no cliente e nas server functions.
+- Validacoes server-side com Zod para usuarios, acoes e evidencias.
+- Criacao e atualizacao de usuarios movidas para server functions.
+- Criacao e atualizacao de acoes movidas para server functions.
+- Mudanca de status pelo Kanban movida para a server function de atualizacao de acoes.
+- Upload de evidencias passou a validar tamanho, MIME type, nome e permissao antes do envio.
+- Registro de evidencias passou a remover arquivo do storage quando o insert de metadados falha.
+- Kanban passou a permitir drag/drop apenas para admin, diretoria ou responsavel da acao.
+- Exportacao CSV passou a usar `responsavel_nome` como fallback.
+- Nova migration `20260604170000_security_access_audit.sql` adicionou `is_active_user`, revisou RLS e criou auditoria automatica em `historico_acoes`.
+
+### Observacoes
+
+- O signup foi removido da aplicacao, mas recomenda-se revisar tambem a configuracao do Supabase Auth para impedir cadastro direto pela API publica.
+- Nao foi possivel executar lint/build neste ambiente porque `npm` e `bun` nao estao disponiveis no PATH.

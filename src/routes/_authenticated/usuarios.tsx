@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { createUsuario } from "@/lib/usuarios.functions";
+import { createUsuario, updateUsuario } from "@/lib/usuarios.functions";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ function Usuarios() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const createFn = useServerFn(createUsuario);
+  const updateFn = useServerFn(updateUsuario);
 
   const { data, isLoading } = useQuery({
     queryKey: ["usuarios-list"],
@@ -56,9 +57,7 @@ function Usuarios() {
 
   const setRole = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
-      await supabase.from("user_roles").delete().eq("user_id", userId);
-      const { error } = await supabase.from("user_roles").insert({ user_id: userId, role: role as any });
-      if (error) throw error;
+      await updateFn({ data: { id: userId, role: role as any } });
     },
     onSuccess: () => { toast.success("Perfil atualizado"); qc.invalidateQueries({ queryKey: ["usuarios-list"] }); },
     onError: (e: any) => toast.error(e.message),
@@ -66,8 +65,7 @@ function Usuarios() {
 
   const toggleStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: boolean }) => {
-      const { error } = await supabase.from("profiles").update({ status }).eq("id", id);
-      if (error) throw error;
+      await updateFn({ data: { id, status } });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["usuarios-list"] }),
     onError: (e: any) => toast.error(e.message),
@@ -101,8 +99,8 @@ function Usuarios() {
       toast.error("Nome, e-mail e senha são obrigatórios.");
       return;
     }
-    if (payload.password.length < 6) {
-      toast.error("A senha deve ter ao menos 6 caracteres.");
+    if (payload.password.length < 8) {
+      toast.error("A senha deve ter ao menos 8 caracteres.");
       return;
     }
     createMutation.mutate(payload);
@@ -127,7 +125,7 @@ function Usuarios() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div><Label>Nome completo *</Label><Input name="nome" required /></div>
                   <div><Label>E-mail *</Label><Input name="email" type="email" required /></div>
-                  <div><Label>Senha inicial *</Label><Input name="password" type="password" minLength={6} required /></div>
+                  <div><Label>Senha inicial *</Label><Input name="password" type="password" minLength={8} required /></div>
                   <div><Label>Cargo</Label><Input name="cargo" /></div>
                   <div>
                     <Label>Área</Label>

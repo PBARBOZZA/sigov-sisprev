@@ -25,24 +25,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) {
-        setTimeout(() => loadRoles(s.user.id), 0);
-      } else {
-        setRoles([]);
-      }
+      void applySession(s);
     });
 
     supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
-      if (data.session?.user) loadRoles(data.session.user.id);
-      setLoading(false);
+      void applySession(data.session).finally(() => setLoading(false));
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  async function applySession(s: Session | null) {
+    if (!s?.user) {
+      setSession(null);
+      setUser(null);
+      setRoles([]);
+      return;
+    }
+
+    const active = await isActiveProfile(s.user.id);
+    if (!active) {
+      await supabase.auth.signOut();
+      setSession(null);
+      setUser(null);
+      setRoles([]);
+      return;
+    }
+
+    setSession(s);
+    setUser(s.user);
+    await loadRoles(s.user.id);
+  }
+
+  async function isActiveProfile(uid: string) {
+    const { data, error } = await supabase.from("profiles").select("status").eq("id", uid).maybeSingle();
+    return !error && data?.status === true;
+  }
 
   async function loadRoles(uid: string) {
     const { data } = await supabase.from("user_roles").select("role").eq("user_id", uid);

@@ -1,8 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { createAcao } from "@/lib/acoes.functions";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +25,7 @@ export const Route = createFileRoute("/_authenticated/plano-acao/")({
 function PlanoAcao() {
   const { canManage } = useAuth();
   const qc = useQueryClient();
+  const createAcaoFn = useServerFn(createAcao);
   const [filters, setFilters] = useState({ q: "", status: "all", eixo: "all", area: "all", responsavel: "all" });
   const [open, setOpen] = useState(false);
 
@@ -63,8 +66,7 @@ function PlanoAcao() {
 
   const createMutation = useMutation({
     mutationFn: async (form: any) => {
-      const { error } = await supabase.from("acoes").insert(form);
-      if (error) throw error;
+      await createAcaoFn({ data: form });
     },
     onSuccess: () => {
       toast.success("Ação criada com sucesso");
@@ -79,17 +81,18 @@ function PlanoAcao() {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const get = (k: string) => f.get(k)?.toString().trim() || null;
+    const codigo = get("codigo");
     const titulo = get("titulo");
     const area_id = get("area");
     const status = get("status") || "nao_iniciada";
     const responsavel_id = get("responsavel");
     const responsavel_nome = get("responsavel_nome");
-    if (!titulo || !area_id || !status || (!responsavel_id && !responsavel_nome)) {
+    if (!codigo || !titulo || !area_id || !status || (!responsavel_id && !responsavel_nome)) {
       toast.error("Título, Área, Status e Responsável são obrigatórios.");
       return;
     }
     createMutation.mutate({
-      codigo: get("codigo"),
+      codigo,
       titulo,
       descricao: get("descricao"),
       objetivo: get("objetivo"),

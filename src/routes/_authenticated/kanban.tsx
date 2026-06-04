@@ -1,7 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
+import { updateAcao } from "@/lib/acoes.functions";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
@@ -17,6 +20,8 @@ const COLUMNS = ["nao_iniciada", "em_andamento", "concluida", "atrasada", "cance
 
 function KanbanView() {
   const qc = useQueryClient();
+  const { user, canManage } = useAuth();
+  const updateAcaoFn = useServerFn(updateAcao);
   const [dragId, setDragId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
@@ -26,8 +31,7 @@ function KanbanView() {
 
   const moveMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase.from("acoes").update({ status: status as any }).eq("id", id);
-      if (error) throw error;
+      await updateAcaoFn({ data: { id, status: status as any } });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["kanban-acoes"] });
@@ -65,8 +69,8 @@ function KanbanView() {
                 {items.map((a) => {
                   const pz = prazoCor(a.prazo_final, a.status);
                   return (
-                    <Card key={a.id} draggable
-                      onDragStart={() => setDragId(a.id)}
+                    <Card key={a.id} draggable={canManage || a.responsavel_id === user?.id}
+                      onDragStart={() => { if (canManage || a.responsavel_id === user?.id) setDragId(a.id); }}
                       className="p-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow">
                       <Link to="/plano-acao/$id" params={{ id: a.id }} className="block">
                         <p className="text-[10px] font-mono text-muted-foreground">{a.codigo}</p>

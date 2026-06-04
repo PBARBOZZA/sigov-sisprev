@@ -22,7 +22,7 @@ function Relatorios() {
     if (!data || data.length === 0) { toast.error("Sem dados para exportar"); return; }
     const headers = ["Código", "Título", "Área", "Responsável", "Status", "Prioridade", "% Execução", "Prazo Final"];
     const rows = data.map((a: any) => [
-      a.codigo, a.titulo, a.area?.nome ?? "", a.responsavel?.nome ?? "",
+      a.codigo, a.titulo, a.area?.nome ?? "", a.responsavel?.nome ?? a.responsavel_nome ?? "",
       STATUS_LABELS[a.status], a.prioridade, a.percentual_execucao, fmtDate(a.prazo_final),
     ]);
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(";")).join("\n");
