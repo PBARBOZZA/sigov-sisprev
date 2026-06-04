@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Search, Loader2, Filter } from "lucide-react";
-import { STATUS_LABELS, PRIORIDADE_LABELS, EIXOS, PROGRAMAS, fmtDate, prazoCor } from "@/lib/acao-helpers";
+import { STATUS_LABELS, PRIORIDADE_LABELS, EIXOS, PROGRAMAS, PERIODICIDADES, fmtDate, prazoCor } from "@/lib/acao-helpers";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/plano-acao/")({
