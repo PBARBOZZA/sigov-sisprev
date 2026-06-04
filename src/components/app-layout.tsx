@@ -9,18 +9,19 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-interface NavItem { to: string; label: string; icon: React.ComponentType<{ className?: string }>; badge?: string; }
+type Permission = "all" | "admin" | "manage";
+interface NavItem { to: string; label: string; icon: React.ComponentType<{ className?: string }>; perm?: Permission; badge?: string; }
 
 const nav: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/plano-acao", label: "Plano de Ação", icon: ListChecks },
   { to: "/kanban", label: "Kanban", icon: Kanban },
-  { to: "/areas", label: "Áreas", icon: Building2 },
-  { to: "/usuarios", label: "Usuários", icon: Users },
+  { to: "/areas", label: "Áreas", icon: Building2, perm: "admin" },
+  { to: "/usuarios", label: "Usuários", icon: Users, perm: "admin" },
   { to: "/evidencias", label: "Evidências", icon: FileCheck2 },
-  { to: "/progestao", label: "Pró-Gestão RPPS", icon: Award },
-  { to: "/indicadores", label: "Indicadores", icon: Gauge },
-  { to: "/relatorios", label: "Relatórios", icon: FileBarChart },
+  { to: "/progestao", label: "Pró-Gestão RPPS", icon: Award, perm: "manage" },
+  { to: "/indicadores", label: "Indicadores", icon: Gauge, perm: "manage" },
+  { to: "/relatorios", label: "Relatórios", icon: FileBarChart, perm: "manage" },
 ];
 
 const future = [
