@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { isBootstrapAdminEmail } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,7 +56,7 @@ function AuthPage() {
     }
 
     const { data: profile } = await supabase.from("profiles").select("status").eq("id", data.user.id).maybeSingle();
-    if (!profile?.status) {
+    if (!isBootstrapAdminEmail(data.user.email) && !profile?.status) {
       await supabase.auth.signOut();
       toast.error("Usuario inativo. Procure um administrador.");
       return;

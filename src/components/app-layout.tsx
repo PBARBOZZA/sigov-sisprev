@@ -1,9 +1,10 @@
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { canAccessModule } from "@/lib/permissions";
 import {
   LayoutDashboard, ListChecks, Kanban, Building2, Users, FileCheck2, Bell,
-  Award, Gauge, FileBarChart, Settings, LogOut, Menu, Shield, ChevronLeft
+  Award, Gauge, FileBarChart, Settings, LogOut, Menu, Shield, ChevronLeft, Lock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,7 @@ const future = [
 ];
 
 export function AppLayout() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, permissionLevel } = useAuth();
   const [open, setOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
@@ -60,7 +61,8 @@ export function AppLayout() {
           {nav.map((item) => {
             const active = location.pathname.startsWith(item.to);
             const Icon = item.icon;
-            return (
+            const allowed = canAccessModule(permissionLevel, item.to);
+            return allowed ? (
               <Link key={item.to} to={item.to}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
@@ -71,6 +73,18 @@ export function AppLayout() {
                 <Icon className="h-4 w-4 shrink-0" />
                 {open && <span className="truncate">{item.label}</span>}
               </Link>
+            ) : (
+              <div key={item.to}
+                title="Acesso restrito"
+                className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-sidebar-foreground/45">
+                <Icon className="h-4 w-4 shrink-0" />
+                {open && (
+                  <>
+                    <span className="truncate flex-1">{item.label}</span>
+                    <Lock className="h-3.5 w-3.5 shrink-0" />
+                  </>
+                )}
+              </div>
             );
           })}
           {open && (
@@ -104,11 +118,17 @@ export function AppLayout() {
             <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
               {nav.map((item) => {
                 const Icon = item.icon;
-                return (
+                const allowed = canAccessModule(permissionLevel, item.to);
+                return allowed ? (
                   <Link key={item.to} to={item.to} onClick={() => setMobileOpen(false)}
                     className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent">
                     <Icon className="h-4 w-4" /><span>{item.label}</span>
                   </Link>
+                ) : (
+                  <div key={item.to}
+                    className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-sidebar-foreground/45">
+                    <Icon className="h-4 w-4" /><span className="flex-1">{item.label}</span><Lock className="h-3.5 w-3.5" />
+                  </div>
                 );
               })}
             </nav>

@@ -3,6 +3,7 @@ import { createMiddleware } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from './types'
+import { isBootstrapAdminEmail } from '@/lib/permissions'
 
 
 
@@ -69,14 +70,16 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
       throw new Error('Unauthorized: No user ID found in token');
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('status')
-      .eq('id', data.claims.sub)
-      .maybeSingle();
+    if (!isBootstrapAdminEmail(data.claims.email as string | undefined)) {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('status')
+        .eq('id', data.claims.sub)
+        .maybeSingle();
 
-    if (profileError || !profile?.status) {
-      throw new Error('Unauthorized: User is inactive or profile was not found');
+      if (profileError || !profile?.status) {
+        throw new Error('Unauthorized: User is inactive or profile was not found');
+      }
     }
 
     return next({
