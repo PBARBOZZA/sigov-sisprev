@@ -97,7 +97,7 @@ function AcaoDetalhes() {
       const metadata = {
         acao_id: id,
         nome_arquivo: file.name,
-        tipo_arquivo: file.type,
+        tipo_arquivo: file.type as any,
         tamanho: file.size,
         observacao: null,
       };
