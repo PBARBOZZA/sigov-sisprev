@@ -1,3 +1,4 @@
+import { RequireRole } from "@/components/require-role";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -17,7 +18,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/areas")({
   head: () => ({ meta: [{ title: "Áreas — SIGOV-SISPREV" }] }),
-  component: Areas,
+  component: () => (<RequireRole require="admin"><Areas /></RequireRole>),
 });
 
 function Areas() {

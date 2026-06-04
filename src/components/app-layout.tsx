@@ -9,18 +9,19 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-interface NavItem { to: string; label: string; icon: React.ComponentType<{ className?: string }>; badge?: string; }
+type Permission = "all" | "admin" | "manage";
+interface NavItem { to: string; label: string; icon: React.ComponentType<{ className?: string }>; perm?: Permission; badge?: string; }
 
 const nav: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/plano-acao", label: "Plano de Ação", icon: ListChecks },
   { to: "/kanban", label: "Kanban", icon: Kanban },
-  { to: "/areas", label: "Áreas", icon: Building2 },
-  { to: "/usuarios", label: "Usuários", icon: Users },
+  { to: "/areas", label: "Áreas", icon: Building2, perm: "admin" },
+  { to: "/usuarios", label: "Usuários", icon: Users, perm: "admin" },
   { to: "/evidencias", label: "Evidências", icon: FileCheck2 },
-  { to: "/progestao", label: "Pró-Gestão RPPS", icon: Award },
-  { to: "/indicadores", label: "Indicadores", icon: Gauge },
-  { to: "/relatorios", label: "Relatórios", icon: FileBarChart },
+  { to: "/progestao", label: "Pró-Gestão RPPS", icon: Award, perm: "manage" },
+  { to: "/indicadores", label: "Indicadores", icon: Gauge, perm: "manage" },
+  { to: "/relatorios", label: "Relatórios", icon: FileBarChart, perm: "manage" },
 ];
 
 const future = [
@@ -29,11 +30,15 @@ const future = [
 ];
 
 export function AppLayout() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, isAdmin, canManage } = useAuth();
   const [open, setOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  const canSee = (perm?: Permission) =>
+    !perm || perm === "all" || (perm === "admin" && isAdmin) || (perm === "manage" && canManage);
+  const visibleNav = nav.filter((i) => canSee(i.perm));
 
   const initials = (user?.user_metadata?.nome || user?.email || "U")
     .split(/\s+/).slice(0, 2).map((s: string) => s[0]?.toUpperCase()).join("");
@@ -57,7 +62,7 @@ export function AppLayout() {
           )}
         </div>
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
-          {nav.map((item) => {
+          {visibleNav.map((item) => {
             const active = location.pathname.startsWith(item.to);
             const Icon = item.icon;
             return (
@@ -102,7 +107,7 @@ export function AppLayout() {
               <p className="text-sm font-semibold">SIGOV-SISPREV</p>
             </div>
             <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
-              {nav.map((item) => {
+              {visibleNav.map((item) => {
                 const Icon = item.icon;
                 return (
                   <Link key={item.to} to={item.to} onClick={() => setMobileOpen(false)}
