@@ -203,7 +203,7 @@ function AcaoDetalhes() {
         )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4 mt-4 border-t text-xs">
-          <Info label="Responsável" value={(acao as any).responsavel?.nome ?? "—"} />
+          <Info label="Responsável" value={(acao as any).responsavel?.nome ?? (acao as any).responsavel_nome ?? "—"} />
           <Info label="E-mail" value={(acao as any).responsavel?.email ?? "—"} />
           <Info label="Programa" value={acao.programa ?? "—"} />
           <Info label="Última atualização" value={fmtDate(acao.updated_at)} />
