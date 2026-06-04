@@ -30,11 +30,15 @@ const future = [
 ];
 
 export function AppLayout() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, isAdmin, canManage } = useAuth();
   const [open, setOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  const canSee = (perm?: Permission) =>
+    !perm || perm === "all" || (perm === "admin" && isAdmin) || (perm === "manage" && canManage);
+  const visibleNav = nav.filter((i) => canSee(i.perm));
 
   const initials = (user?.user_metadata?.nome || user?.email || "U")
     .split(/\s+/).slice(0, 2).map((s: string) => s[0]?.toUpperCase()).join("");
