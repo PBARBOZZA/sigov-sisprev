@@ -62,7 +62,7 @@ export function AppLayout() {
           )}
         </div>
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
-          {nav.map((item) => {
+          {visibleNav.map((item) => {
             const active = location.pathname.startsWith(item.to);
             const Icon = item.icon;
             return (
@@ -107,7 +107,7 @@ export function AppLayout() {
               <p className="text-sm font-semibold">SIGOV-SISPREV</p>
             </div>
             <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
-              {nav.map((item) => {
+              {visibleNav.map((item) => {
                 const Icon = item.icon;
                 return (
                   <Link key={item.to} to={item.to} onClick={() => setMobileOpen(false)}
