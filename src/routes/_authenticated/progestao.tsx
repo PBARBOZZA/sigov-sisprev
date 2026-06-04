@@ -1,3 +1,4 @@
+import { RequireRole } from "@/components/require-role";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,7 +9,7 @@ import { Award, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/progestao")({
   head: () => ({ meta: [{ title: "Pró-Gestão RPPS — SIGOV-SISPREV" }] }),
-  component: ProGestao,
+  component: () => (<RequireRole require="manage"><ProGestao /></RequireRole>),
 });
 
 const SIT_LABELS: Record<string, string> = {

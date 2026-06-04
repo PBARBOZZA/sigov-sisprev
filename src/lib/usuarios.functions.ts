@@ -91,7 +91,7 @@ export const updateUsuario = createServerFn({ method: "POST" })
     if (Object.keys(profilePatch).length > 0) {
       const { error: profileError } = await supabaseAdmin
         .from("profiles")
-        .update(profilePatch)
+        .update(profilePatch as any)
         .eq("id", data.id);
       if (profileError) throw new Error(profileError.message);
     }

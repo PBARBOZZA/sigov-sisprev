@@ -1,3 +1,4 @@
+import { RequireRole } from "@/components/require-role";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -21,7 +22,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/usuarios")({
   head: () => ({ meta: [{ title: "Usuários — SIGOV-SISPREV" }] }),
-  component: Usuarios,
+  component: () => (<RequireRole require="admin"><Usuarios /></RequireRole>),
 });
 
 const ROLES: { value: "admin" | "diretoria" | "responsavel" | "conselheiro"; label: string }[] = [
