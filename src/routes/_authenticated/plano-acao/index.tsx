@@ -23,7 +23,7 @@ export const Route = createFileRoute("/_authenticated/plano-acao/")({
 function PlanoAcao() {
   const { canManage } = useAuth();
   const qc = useQueryClient();
-  const [filters, setFilters] = useState({ q: "", status: "all", eixo: "all", area: "all" });
+  const [filters, setFilters] = useState({ q: "", status: "all", eixo: "all", area: "all", responsavel: "all" });
   const [open, setOpen] = useState(false);
 
   const { data: acoes, isLoading } = useQuery({
@@ -48,12 +48,18 @@ function PlanoAcao() {
   });
 
   const filtered = (acoes ?? []).filter((a) => {
-    if (filters.q && !`${a.titulo} ${a.codigo} ${a.descricao ?? ""}`.toLowerCase().includes(filters.q.toLowerCase())) return false;
+    if (filters.q && !`${a.titulo} ${a.codigo} ${a.descricao ?? ""} ${a.responsavel_nome ?? ""}`.toLowerCase().includes(filters.q.toLowerCase())) return false;
     if (filters.status !== "all" && a.status !== filters.status) return false;
     if (filters.eixo !== "all" && a.eixo_estrategico !== filters.eixo) return false;
     if (filters.area !== "all" && a.area_id !== filters.area) return false;
+    if (filters.responsavel !== "all") {
+      const nome = (a as any).responsavel?.nome ?? a.responsavel_nome ?? "";
+      if (nome !== filters.responsavel) return false;
+    }
     return true;
   });
+
+  const responsavelOptions = Array.from(new Set((acoes ?? []).map((a) => (a as any).responsavel?.nome ?? a.responsavel_nome).filter(Boolean))) as string[];
 
   const createMutation = useMutation({
     mutationFn: async (form: any) => {
@@ -73,20 +79,32 @@ function PlanoAcao() {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const get = (k: string) => f.get(k)?.toString().trim() || null;
+    const titulo = get("titulo");
+    const area_id = get("area");
+    const status = get("status") || "nao_iniciada";
+    const responsavel_id = get("responsavel");
+    const responsavel_nome = get("responsavel_nome");
+    if (!titulo || !area_id || !status || (!responsavel_id && !responsavel_nome)) {
+      toast.error("Título, Área, Status e Responsável são obrigatórios.");
+      return;
+    }
     createMutation.mutate({
       codigo: get("codigo"),
-      titulo: get("titulo"),
+      titulo,
       descricao: get("descricao"),
       objetivo: get("objetivo"),
       programa: get("programa"),
       eixo_estrategico: get("eixo"),
-      area_id: get("area"),
-      responsavel_id: get("responsavel"),
+      area_id,
+      responsavel_id,
+      responsavel_nome: responsavel_id ? null : responsavel_nome,
       data_inicio: get("data_inicio"),
       prazo_final: get("prazo_final"),
-      status: get("status") || "nao_iniciada",
+      status,
       prioridade: get("prioridade") || "media",
       percentual_execucao: Number(f.get("percentual") || 0),
+      periodicidade: get("periodicidade"),
+      observacoes: get("observacoes"),
     });
   }
 
