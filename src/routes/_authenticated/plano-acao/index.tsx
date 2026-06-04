@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Search, Loader2, Filter } from "lucide-react";
-import { STATUS_LABELS, PRIORIDADE_LABELS, EIXOS, PROGRAMAS, fmtDate, prazoCor } from "@/lib/acao-helpers";
+import { STATUS_LABELS, PRIORIDADE_LABELS, EIXOS, PROGRAMAS, PERIODICIDADES, fmtDate, prazoCor } from "@/lib/acao-helpers";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/plano-acao/")({
@@ -23,7 +23,7 @@ export const Route = createFileRoute("/_authenticated/plano-acao/")({
 function PlanoAcao() {
   const { canManage } = useAuth();
   const qc = useQueryClient();
-  const [filters, setFilters] = useState({ q: "", status: "all", eixo: "all", area: "all" });
+  const [filters, setFilters] = useState({ q: "", status: "all", eixo: "all", area: "all", responsavel: "all" });
   const [open, setOpen] = useState(false);
 
   const { data: acoes, isLoading } = useQuery({
@@ -48,12 +48,18 @@ function PlanoAcao() {
   });
 
   const filtered = (acoes ?? []).filter((a) => {
-    if (filters.q && !`${a.titulo} ${a.codigo} ${a.descricao ?? ""}`.toLowerCase().includes(filters.q.toLowerCase())) return false;
+    if (filters.q && !`${a.titulo} ${a.codigo} ${a.descricao ?? ""} ${a.responsavel_nome ?? ""}`.toLowerCase().includes(filters.q.toLowerCase())) return false;
     if (filters.status !== "all" && a.status !== filters.status) return false;
     if (filters.eixo !== "all" && a.eixo_estrategico !== filters.eixo) return false;
     if (filters.area !== "all" && a.area_id !== filters.area) return false;
+    if (filters.responsavel !== "all") {
+      const nome = (a as any).responsavel?.nome ?? a.responsavel_nome ?? "";
+      if (nome !== filters.responsavel) return false;
+    }
     return true;
   });
+
+  const responsavelOptions = Array.from(new Set((acoes ?? []).map((a) => (a as any).responsavel?.nome ?? a.responsavel_nome).filter(Boolean))) as string[];
 
   const createMutation = useMutation({
     mutationFn: async (form: any) => {
@@ -73,20 +79,32 @@ function PlanoAcao() {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const get = (k: string) => f.get(k)?.toString().trim() || null;
+    const titulo = get("titulo");
+    const area_id = get("area");
+    const status = get("status") || "nao_iniciada";
+    const responsavel_id = get("responsavel");
+    const responsavel_nome = get("responsavel_nome");
+    if (!titulo || !area_id || !status || (!responsavel_id && !responsavel_nome)) {
+      toast.error("Título, Área, Status e Responsável são obrigatórios.");
+      return;
+    }
     createMutation.mutate({
       codigo: get("codigo"),
-      titulo: get("titulo"),
+      titulo,
       descricao: get("descricao"),
       objetivo: get("objetivo"),
       programa: get("programa"),
       eixo_estrategico: get("eixo"),
-      area_id: get("area"),
-      responsavel_id: get("responsavel"),
+      area_id,
+      responsavel_id,
+      responsavel_nome: responsavel_id ? null : responsavel_nome,
       data_inicio: get("data_inicio"),
       prazo_final: get("prazo_final"),
-      status: get("status") || "nao_iniciada",
+      status,
       prioridade: get("prioridade") || "media",
       percentual_execucao: Number(f.get("percentual") || 0),
+      periodicidade: get("periodicidade"),
+      observacoes: get("observacoes"),
     });
   }
 
@@ -120,15 +138,21 @@ function PlanoAcao() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <SelectField label="Programa" name="programa" options={PROGRAMAS.map(p => ({ value: p, label: p }))} />
                   <SelectField label="Eixo estratégico" name="eixo" options={EIXOS.map(e => ({ value: e, label: e }))} />
-                  <SelectField label="Área" name="area" options={(areas ?? []).map(a => ({ value: a.id, label: a.nome }))} />
-                  <SelectField label="Responsável" name="responsavel" options={(usuarios ?? []).map(u => ({ value: u.id, label: u.nome }))} />
+                  <SelectField label="Área *" name="area" options={(areas ?? []).map(a => ({ value: a.id, label: a.nome }))} />
+                  <SelectField label="Responsável (cadastrado)" name="responsavel" options={(usuarios ?? []).map(u => ({ value: u.id, label: u.nome }))} />
+                  <Field label="Responsável (texto livre)" name="responsavel_nome" placeholder="Use se não há cadastro" />
+                  <SelectField label="Periodicidade" name="periodicidade" options={PERIODICIDADES.map(p => ({ value: p, label: p }))} />
                   <Field label="Data início" name="data_inicio" type="date" />
                   <Field label="Prazo final" name="prazo_final" type="date" />
-                  <SelectField label="Status" name="status" defaultValue="nao_iniciada"
+                  <SelectField label="Status *" name="status" defaultValue="nao_iniciada"
                     options={Object.entries(STATUS_LABELS).map(([v, l]) => ({ value: v, label: l }))} />
                   <SelectField label="Prioridade" name="prioridade" defaultValue="media"
                     options={Object.entries(PRIORIDADE_LABELS).map(([v, l]) => ({ value: v, label: l }))} />
                   <Field label="% Execução" name="percentual" type="number" min={0} max={100} defaultValue="0" />
+                </div>
+                <div>
+                  <Label>Observações</Label>
+                  <Textarea name="observacoes" rows={2} />
                 </div>
                 <DialogFooter>
                   <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
@@ -156,6 +180,8 @@ function PlanoAcao() {
             placeholder="Eixo" options={[{ value: "all", label: "Todos eixos" }, ...EIXOS.map(e => ({ value: e, label: e }))]} />
           <SelectFilter value={filters.area} onChange={(v) => setFilters({ ...filters, area: v })}
             placeholder="Área" options={[{ value: "all", label: "Todas áreas" }, ...(areas ?? []).map(a => ({ value: a.id, label: a.nome }))]} />
+          <SelectFilter value={filters.responsavel} onChange={(v) => setFilters({ ...filters, responsavel: v })}
+            placeholder="Responsável" options={[{ value: "all", label: "Todos responsáveis" }, ...responsavelOptions.map(n => ({ value: n, label: n }))]} />
         </div>
       </Card>
 
@@ -187,7 +213,7 @@ function PlanoAcao() {
                         <p className="text-xs text-muted-foreground truncate max-w-md">{a.eixo_estrategico ?? "—"}</p>
                       </td>
                       <td className="px-3 py-2 text-xs">{(a as any).area?.nome ?? "—"}</td>
-                      <td className="px-3 py-2 text-xs">{(a as any).responsavel?.nome ?? "—"}</td>
+                      <td className="px-3 py-2 text-xs">{(a as any).responsavel?.nome ?? a.responsavel_nome ?? "—"}</td>
                       <td className="px-3 py-2 text-xs">
                         <div className="flex items-center gap-2">
                           <span>{fmtDate(a.prazo_final)}</span>

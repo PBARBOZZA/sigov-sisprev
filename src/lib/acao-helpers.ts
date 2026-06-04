@@ -36,6 +36,8 @@ export const PROGRAMAS = [
   "Programa de Educação Previdenciária",
 ];
 
+export const PERIODICIDADES = ["Única", "Diária", "Mensal", "Trimestral", "Semestral", "Anual", "Esporádica"];
+
 export function prazoCor(prazo: string | null, status: string): { color: string; label: string; dias: number | null } {
   if (status === "concluida") return { color: "bg-muted text-muted-foreground", label: "Concluído", dias: null };
   if (!prazo) return { color: "bg-muted text-muted-foreground", label: "Sem prazo", dias: null };

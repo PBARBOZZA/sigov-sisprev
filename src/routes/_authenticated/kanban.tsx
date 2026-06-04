@@ -72,7 +72,7 @@ function KanbanView() {
                         <p className="text-[10px] font-mono text-muted-foreground">{a.codigo}</p>
                         <p className="text-sm font-medium line-clamp-2">{a.titulo}</p>
                         <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                          <span className="truncate">{(a as any).responsavel?.nome ?? "—"}</span>
+                          <span className="truncate">{(a as any).responsavel?.nome ?? (a as any).responsavel_nome ?? "—"}</span>
                           <span className="font-medium text-primary">{a.percentual_execucao}%</span>
                         </div>
                         <div className="mt-2 flex items-center justify-between gap-1">

@@ -59,7 +59,7 @@ function Dashboard() {
   }, {}));
 
   const byResp = Object.values(acoes.reduce<Record<string, { resp: string; total: number }>>((acc, a) => {
-    const nome = (a as any).responsavel?.nome ?? "Sem responsável";
+    const nome = (a as any).responsavel?.nome ?? (a as any).responsavel_nome ?? "Sem responsável";
     if (!acc[nome]) acc[nome] = { resp: nome, total: 0 };
     acc[nome].total++;
     return acc;
@@ -183,7 +183,7 @@ function Dashboard() {
                   <Link to="/plano-acao/$id" params={{ id: a.id }} className="flex items-center justify-between gap-3 p-3 rounded-md border hover:bg-accent">
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{a.titulo}</p>
-                      <p className="text-xs text-muted-foreground">{(a as any).responsavel?.nome ?? "—"} · {a.percentual_execucao}%</p>
+                      <p className="text-xs text-muted-foreground">{(a as any).responsavel?.nome ?? (a as any).responsavel_nome ?? "—"} · {a.percentual_execucao}%</p>
                     </div>
                     <Badge variant="outline">{STATUS_LABELS[a.status]}</Badge>
                   </Link>
