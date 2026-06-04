@@ -1,8 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { createUsuarioSchema, updateUsuarioSchema } from "@/lib/security-schemas";
+import { isBootstrapAdminEmail } from "@/lib/permissions";
 
-async function assertAdmin(supabase: any, userId: string) {
+async function assertAdmin(supabase: any, userId: string, email?: string | null) {
+  if (isBootstrapAdminEmail(email)) return;
+
   const { data: roles, error } = await supabase
     .from("user_roles")
     .select("role")
@@ -18,7 +21,7 @@ export const createUsuario = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(createUsuarioSchema)
   .handler(async ({ data, context }) => {
-    await assertAdmin(context.supabase, context.userId);
+    await assertAdmin(context.supabase, context.userId, (context.claims as any)?.email);
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
@@ -66,7 +69,7 @@ export const updateUsuario = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(updateUsuarioSchema)
   .handler(async ({ data, context }) => {
-    await assertAdmin(context.supabase, context.userId);
+    await assertAdmin(context.supabase, context.userId, (context.claims as any)?.email);
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 

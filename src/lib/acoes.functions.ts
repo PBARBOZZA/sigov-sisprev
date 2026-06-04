@@ -7,12 +7,15 @@ import {
   updateAcaoSchema,
   type EvidenciaUploadInput,
 } from "@/lib/security-schemas";
+import { isBootstrapAdminEmail } from "@/lib/permissions";
 
 const registerEvidenceSchema = evidenciaUploadSchema.extend({
   caminho_arquivo: z.string().min(1).max(260),
 });
 
-async function getRoles(supabase: any, userId: string) {
+async function getRoles(supabase: any, userId: string, email?: string | null) {
+  if (isBootstrapAdminEmail(email)) return ["admin"];
+
   const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", userId);
   if (error) throw new Error("Falha ao validar perfil do usuario.");
   return (data ?? []).map((r: { role: string }) => r.role);
@@ -51,8 +54,8 @@ function sanitizeFileName(name: string) {
     .slice(0, 140);
 }
 
-async function assertEvidencePermission(supabase: any, userId: string, acaoId: string) {
-  const roles = await getRoles(supabase, userId);
+async function assertEvidencePermission(supabase: any, userId: string, acaoId: string, email?: string | null) {
+  const roles = await getRoles(supabase, userId, email);
   const { data: acao, error } = await supabase
     .from("acoes")
     .select("id,responsavel_id")
@@ -121,7 +124,7 @@ export const prepareEvidenceUpload = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(evidenciaUploadSchema)
   .handler(async ({ data, context }) => {
-    await assertEvidencePermission(context.supabase, context.userId, data.acao_id);
+    await assertEvidencePermission(context.supabase, context.userId, data.acao_id, (context.claims as any)?.email);
 
     const safeName = sanitizeFileName(data.nome_arquivo);
     if (!safeName) throw new Error("Nome do arquivo invalido.");
@@ -134,7 +137,7 @@ export const registerEvidenceUpload = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(registerEvidenceSchema)
   .handler(async ({ data, context }) => {
-    await assertEvidencePermission(context.supabase, context.userId, data.acao_id);
+    await assertEvidencePermission(context.supabase, context.userId, data.acao_id, (context.claims as any)?.email);
     validateEvidencePath(data, context.userId, data.caminho_arquivo);
 
     const { error } = await context.supabase.from("evidencias").insert({

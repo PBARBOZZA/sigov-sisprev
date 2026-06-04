@@ -49,11 +49,13 @@ function Usuarios() {
         role: roles?.find((r) => r.user_id === p.id)?.role ?? "responsavel",
       }));
     },
+    enabled: isAdmin,
   });
 
   const { data: areas } = useQuery({
     queryKey: ["areas-options-usuarios"],
     queryFn: async () => (await supabase.from("areas").select("id,nome").order("nome")).data ?? [],
+    enabled: isAdmin,
   });
 
   const setRole = useMutation({
@@ -156,6 +158,16 @@ function Usuarios() {
         )}
       </div>
 
+      {!isAdmin && (
+        <Card className="p-8 text-center">
+          <p className="font-medium">Acesso restrito</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            O cadastro e a manutencao de usuarios sao permitidos apenas para administradores.
+          </p>
+        </Card>
+      )}
+
+      {isAdmin && (
       <Card>
         {isLoading ? (
           <div className="flex justify-center p-12"><Loader2 className="animate-spin" /></div>
@@ -212,6 +224,7 @@ function Usuarios() {
           </div>
         )}
       </Card>
+      )}
       <p className="text-xs text-muted-foreground">
         Usuários cadastrados aqui já ficam disponíveis no campo <strong>Responsável</strong> do cadastro de ações.
       </p>
