@@ -9,9 +9,11 @@ interface Props {
 }
 
 export function RequireRole({ require, children }: Props) {
-  const { isAdmin, canManage, loading } = useAuth();
+  const { permissionLevel, loading } = useAuth();
   if (loading) return null;
-  const allowed = require === "admin" ? isAdmin : canManage;
+  const allowed = require === "admin"
+    ? permissionLevel === "admin"
+    : permissionLevel === "admin" || permissionLevel === "manage";
   if (!allowed) {
     return (
       <div className="flex items-center justify-center p-8">

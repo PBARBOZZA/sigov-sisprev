@@ -31,19 +31,11 @@ const future = [
 ];
 
 export function AppLayout() {
-<<<<<<< ajuste-admin-final
   const { user, signOut, permissionLevel } = useAuth();
-=======
-  const { user, signOut, isAdmin, canManage } = useAuth();
->>>>>>> main
   const [open, setOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-
-  const canSee = (perm?: Permission) =>
-    !perm || perm === "all" || (perm === "admin" && isAdmin) || (perm === "manage" && canManage);
-  const visibleNav = nav.filter((i) => canSee(i.perm));
 
   const initials = (user?.user_metadata?.nome || user?.email || "U")
     .split(/\s+/).slice(0, 2).map((s: string) => s[0]?.toUpperCase()).join("");
@@ -67,7 +59,7 @@ export function AppLayout() {
           )}
         </div>
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
-          {visibleNav.map((item) => {
+          {nav.map((item) => {
             const active = location.pathname.startsWith(item.to);
             const Icon = item.icon;
             const allowed = canAccessModule(permissionLevel, item.to);
@@ -125,7 +117,7 @@ export function AppLayout() {
               <p className="text-sm font-semibold">SIGOV-SISPREV</p>
             </div>
             <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
-              {visibleNav.map((item) => {
+              {nav.map((item) => {
                 const Icon = item.icon;
                 const allowed = canAccessModule(permissionLevel, item.to);
                 return allowed ? (
