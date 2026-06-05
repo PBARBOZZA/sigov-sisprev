@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { getPermissionLevel, isBootstrapAdminEmail, type PermissionLevel } from "@/lib/permissions";
+import { getPermissionLevel, isBootstrapAdminEmail, type AppRole, type PermissionLevel } from "@/lib/permissions";
 
-export type AppRole = "admin" | "diretoria" | "responsavel" | "conselheiro";
+export type { AppRole } from "@/lib/permissions";
 
 interface AuthCtx {
   user: User | null;

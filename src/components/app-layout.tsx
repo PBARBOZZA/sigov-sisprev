@@ -1,28 +1,27 @@
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, type ComponentType } from "react";
 import { useAuth } from "@/lib/auth";
 import { canAccessModule } from "@/lib/permissions";
 import {
   LayoutDashboard, ListChecks, Kanban, Building2, Users, FileCheck2, Bell,
-  Award, Gauge, FileBarChart, Settings, LogOut, Menu, Shield, ChevronLeft, Lock
+  Award, Gauge, FileBarChart, LogOut, Menu, Shield, ChevronLeft, Lock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-type Permission = "all" | "admin" | "manage";
-interface NavItem { to: string; label: string; icon: React.ComponentType<{ className?: string }>; perm?: Permission; badge?: string; }
+interface NavItem { to: string; label: string; icon: ComponentType<{ className?: string }>; }
 
 const nav: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/plano-acao", label: "Plano de Ação", icon: ListChecks },
   { to: "/kanban", label: "Kanban", icon: Kanban },
-  { to: "/areas", label: "Áreas", icon: Building2, perm: "admin" },
-  { to: "/usuarios", label: "Usuários", icon: Users, perm: "admin" },
+  { to: "/areas", label: "Áreas", icon: Building2 },
+  { to: "/usuarios", label: "Usuários", icon: Users },
   { to: "/evidencias", label: "Evidências", icon: FileCheck2 },
-  { to: "/progestao", label: "Pró-Gestão RPPS", icon: Award, perm: "manage" },
-  { to: "/indicadores", label: "Indicadores", icon: Gauge, perm: "manage" },
-  { to: "/relatorios", label: "Relatórios", icon: FileBarChart, perm: "manage" },
+  { to: "/progestao", label: "Pró-Gestão RPPS", icon: Award },
+  { to: "/indicadores", label: "Indicadores", icon: Gauge },
+  { to: "/relatorios", label: "Relatórios", icon: FileBarChart },
 ];
 
 const future = [

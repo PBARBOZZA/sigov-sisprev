@@ -1,7 +1,6 @@
-import type { AppRole } from "@/lib/auth";
-
 export const BOOTSTRAP_ADMIN_EMAIL = "periclescep@gmail.com";
 
+export type AppRole = "admin" | "diretoria" | "responsavel" | "conselheiro";
 export type PermissionLevel = "admin" | "manage" | "responsavel";
 
 export function isBootstrapAdminEmail(email?: string | null) {
