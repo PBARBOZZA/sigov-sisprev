@@ -16,13 +16,17 @@ export const Route = createFileRoute("/_authenticated/relatorios")({
 function Relatorios() {
   const { data, isLoading } = useQuery({
     queryKey: ["relatorio-acoes"],
-    queryFn: async () => (await supabase.from("acoes").select("*, area:areas(nome), responsavel:profiles!acoes_responsavel_id_fkey(nome)").order("codigo")).data ?? [],
+    queryFn: async () => (await supabase
+      .from("acoes")
+      .select("*, area:areas(nome), responsavel:profiles!acoes_responsavel_id_fkey(nome), plano:plano_anual(id,ano,nome), eixo:pga_eixos(id,nome,codigo), programa_ref:pga_programas(id,nome,codigo)")
+      .order("codigo")).data ?? [],
   });
 
   function exportCSV() {
     if (!data || data.length === 0) { toast.error("Sem dados para exportar"); return; }
-    const headers = ["Código", "Título", "Área", "Responsável", "Status", "Prioridade", "% Execução", "Prazo Final"];
+    const headers = ["Plano Anual", "Eixo", "Programa", "Código", "Título", "Área", "Responsável", "Status", "Prioridade", "% Execução", "Prazo Final"];
     const rows = data.map((a: any) => [
+      getPlanoNome(a), getEixoNome(a), getProgramaNome(a),
       a.codigo, a.titulo, a.area?.nome ?? "", a.responsavel?.nome ?? a.responsavel_nome ?? "",
       STATUS_LABELS[a.status], a.prioridade, a.percentual_execucao, fmtDate(a.prazo_final),
     ]);
@@ -60,4 +64,16 @@ function Relatorios() {
       </div>
     </div>
   );
+}
+
+function getPlanoNome(acao: any) {
+  return acao.plano?.nome ?? "";
+}
+
+function getEixoNome(acao: any) {
+  return acao.eixo?.nome ?? acao.eixo_estrategico ?? "";
+}
+
+function getProgramaNome(acao: any) {
+  return acao.programa_ref?.nome ?? acao.programa ?? "";
 }
