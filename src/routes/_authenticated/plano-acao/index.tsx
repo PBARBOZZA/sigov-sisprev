@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Plus, Search, Loader2, Filter } from "lucide-react";
 import { STATUS_LABELS, PRIORIDADE_LABELS, EIXOS, PROGRAMAS, PERIODICIDADES, fmtDate, prazoCor } from "@/lib/acao-helpers";
 import { toast } from "sonner";
+import { differenceInDays, parseISO } from "date-fns";
 
 export const Route = createFileRoute("/_authenticated/plano-acao/")({
   head: () => ({ meta: [{ title: "Plano de Ação — SIGOV-SISPREV" }] }),
@@ -26,7 +27,16 @@ function PlanoAcao() {
   const { canManage } = useAuth();
   const qc = useQueryClient();
   const createAcaoFn = useServerFn(createAcao);
-  const [filters, setFilters] = useState({ q: "", status: "all", eixo: "all", area: "all", responsavel: "all" });
+  const [filters, setFilters] = useState({
+    q: "",
+    plano: "all",
+    status: "all",
+    eixo: "all",
+    programa: "all",
+    area: "all",
+    responsavel: "all",
+    prazo: "all",
+  });
   const [open, setOpen] = useState(false);
 
   const { data: acoes, isLoading } = useQuery({
@@ -34,10 +44,25 @@ function PlanoAcao() {
     queryFn: async () => {
       const { data } = await supabase
         .from("acoes")
-        .select("*, area:areas(id,nome), responsavel:profiles!acoes_responsavel_id_fkey(id,nome)")
+        .select("*, area:areas(id,nome), responsavel:profiles!acoes_responsavel_id_fkey(id,nome), plano:plano_anual(id,ano,nome), eixo:pga_eixos(id,nome,codigo), programa_ref:pga_programas(id,nome,codigo)")
         .order("prazo_final", { ascending: true });
       return data ?? [];
     },
+  });
+
+  const { data: planos } = useQuery({
+    queryKey: ["planos-options"],
+    queryFn: async () => (await supabase.from("plano_anual").select("id,ano,nome").order("ano", { ascending: false })).data ?? [],
+  });
+
+  const { data: eixos } = useQuery({
+    queryKey: ["pga-eixos-options"],
+    queryFn: async () => (await supabase.from("pga_eixos").select("id,nome,ordem").order("ordem")).data ?? [],
+  });
+
+  const { data: programas } = useQuery({
+    queryKey: ["pga-programas-options"],
+    queryFn: async () => (await supabase.from("pga_programas").select("id,nome,ordem").order("ordem")).data ?? [],
   });
 
   const { data: areas } = useQuery({
@@ -51,18 +76,31 @@ function PlanoAcao() {
   });
 
   const filtered = (acoes ?? []).filter((a) => {
-    if (filters.q && !`${a.titulo} ${a.codigo} ${a.descricao ?? ""} ${a.responsavel_nome ?? ""}`.toLowerCase().includes(filters.q.toLowerCase())) return false;
+    const eixoNome = getEixoNome(a);
+    const programaNome = getProgramaNome(a);
+    if (filters.q && !`${a.titulo} ${a.codigo} ${a.descricao ?? ""} ${a.responsavel_nome ?? ""} ${eixoNome} ${programaNome}`.toLowerCase().includes(filters.q.toLowerCase())) return false;
+    if (filters.plano !== "all" && a.plano_anual_id !== filters.plano) return false;
     if (filters.status !== "all" && a.status !== filters.status) return false;
-    if (filters.eixo !== "all" && a.eixo_estrategico !== filters.eixo) return false;
+    if (filters.eixo !== "all" && eixoNome !== filters.eixo) return false;
+    if (filters.programa !== "all" && programaNome !== filters.programa) return false;
     if (filters.area !== "all" && a.area_id !== filters.area) return false;
     if (filters.responsavel !== "all") {
       const nome = (a as any).responsavel?.nome ?? a.responsavel_nome ?? "";
       if (nome !== filters.responsavel) return false;
     }
+    if (filters.prazo !== "all" && !matchesPrazoFilter(a, filters.prazo)) return false;
     return true;
   });
 
   const responsavelOptions = Array.from(new Set((acoes ?? []).map((a) => (a as any).responsavel?.nome ?? a.responsavel_nome).filter(Boolean))) as string[];
+  const eixoOptions = Array.from(new Set([
+    ...(eixos ?? []).map((e) => e.nome),
+    ...((acoes ?? []).map((a) => a.eixo_estrategico).filter(Boolean) as string[]),
+  ]));
+  const programaOptions = Array.from(new Set([
+    ...(programas ?? []).map((p) => p.nome),
+    ...((acoes ?? []).map((a) => a.programa).filter(Boolean) as string[]),
+  ]));
 
   const createMutation = useMutation({
     mutationFn: async (form: any) => {
@@ -177,14 +215,25 @@ function PlanoAcao() {
               value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })}
               className="pl-9" />
           </div>
+          <SelectFilter value={filters.plano} onChange={(v) => setFilters({ ...filters, plano: v })}
+            placeholder="Plano Anual" options={[{ value: "all", label: "Todos planos" }, ...(planos ?? []).map(p => ({ value: p.id, label: `${p.nome} (${p.ano})` }))]} />
           <SelectFilter value={filters.status} onChange={(v) => setFilters({ ...filters, status: v })}
             placeholder="Status" options={[{ value: "all", label: "Todos status" }, ...Object.entries(STATUS_LABELS).map(([v, l]) => ({ value: v, label: l }))]} />
           <SelectFilter value={filters.eixo} onChange={(v) => setFilters({ ...filters, eixo: v })}
-            placeholder="Eixo" options={[{ value: "all", label: "Todos eixos" }, ...EIXOS.map(e => ({ value: e, label: e }))]} />
+            placeholder="Eixo" options={[{ value: "all", label: "Todos eixos" }, ...eixoOptions.map(e => ({ value: e, label: e }))]} />
+          <SelectFilter value={filters.programa} onChange={(v) => setFilters({ ...filters, programa: v })}
+            placeholder="Programa" options={[{ value: "all", label: "Todos programas" }, ...programaOptions.map(p => ({ value: p, label: p }))]} />
           <SelectFilter value={filters.area} onChange={(v) => setFilters({ ...filters, area: v })}
             placeholder="Área" options={[{ value: "all", label: "Todas áreas" }, ...(areas ?? []).map(a => ({ value: a.id, label: a.nome }))]} />
           <SelectFilter value={filters.responsavel} onChange={(v) => setFilters({ ...filters, responsavel: v })}
             placeholder="Responsável" options={[{ value: "all", label: "Todos responsáveis" }, ...responsavelOptions.map(n => ({ value: n, label: n }))]} />
+          <SelectFilter value={filters.prazo} onChange={(v) => setFilters({ ...filters, prazo: v })}
+            placeholder="Prazo" options={[
+              { value: "all", label: "Todos prazos" },
+              { value: "atrasadas", label: "Atrasadas" },
+              { value: "vence_30", label: "Vencem em 30 dias" },
+              { value: "sem_prazo", label: "Sem prazo" },
+            ]} />
         </div>
       </Card>
 
@@ -201,7 +250,7 @@ function PlanoAcao() {
             <table className="w-full text-sm">
               <thead className="bg-muted/50 border-b">
                 <tr className="text-left">
-                  <Th>Código</Th><Th>Título</Th><Th>Área</Th><Th>Responsável</Th>
+                  <Th>Código</Th><Th>Título</Th><Th>Plano / Eixo / Programa</Th><Th>Área</Th><Th>Responsável</Th>
                   <Th>Prazo</Th><Th>%</Th><Th>Status</Th>
                 </tr>
               </thead>
@@ -213,7 +262,14 @@ function PlanoAcao() {
                       <td className="px-3 py-2 font-mono text-xs">{a.codigo}</td>
                       <td className="px-3 py-2">
                         <Link to="/plano-acao/$id" params={{ id: a.id }} className="font-medium hover:underline">{a.titulo}</Link>
-                        <p className="text-xs text-muted-foreground truncate max-w-md">{a.eixo_estrategico ?? "—"}</p>
+                        <p className="text-xs text-muted-foreground truncate max-w-md">{a.descricao ?? "—"}</p>
+                      </td>
+                      <td className="px-3 py-2 text-xs min-w-[240px]">
+                        <div className="space-y-1">
+                          <p className="font-medium">{getPlanoNome(a)}</p>
+                          <p className="text-muted-foreground">{getEixoNome(a)}</p>
+                          <p className="text-muted-foreground truncate max-w-xs">{getProgramaNome(a)}</p>
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-xs">{(a as any).area?.nome ?? "—"}</td>
                       <td className="px-3 py-2 text-xs">{(a as any).responsavel?.nome ?? a.responsavel_nome ?? "—"}</td>
@@ -274,4 +330,25 @@ function SelectFilter({ value, onChange, options, placeholder }: { value: string
       <SelectContent>{options.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
     </Select>
   );
+}
+
+function getPlanoNome(acao: any) {
+  return acao.plano?.nome ?? "Sem plano";
+}
+
+function getEixoNome(acao: any) {
+  return acao.eixo?.nome ?? acao.eixo_estrategico ?? "Sem eixo";
+}
+
+function getProgramaNome(acao: any) {
+  return acao.programa_ref?.nome ?? acao.programa ?? "Sem programa";
+}
+
+function matchesPrazoFilter(acao: any, filter: string) {
+  if (filter === "sem_prazo") return !acao.prazo_final;
+  if (!acao.prazo_final || acao.status === "concluida" || acao.status === "cancelada") return false;
+  const dias = differenceInDays(parseISO(acao.prazo_final), new Date());
+  if (filter === "atrasadas") return dias < 0;
+  if (filter === "vence_30") return dias >= 0 && dias <= 30;
+  return true;
 }

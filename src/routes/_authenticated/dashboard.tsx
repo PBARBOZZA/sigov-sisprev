@@ -27,7 +27,10 @@ function Dashboard() {
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard-acoes"],
     queryFn: async () => {
-      const { data: acoes } = await supabase.from("acoes").select("*, area:areas(nome), responsavel:profiles!acoes_responsavel_id_fkey(nome)").order("updated_at", { ascending: false });
+      const { data: acoes } = await supabase
+        .from("acoes")
+        .select("*, area:areas(nome), responsavel:profiles!acoes_responsavel_id_fkey(nome), plano:plano_anual(id,ano,nome), eixo:pga_eixos(id,nome,codigo), programa_ref:pga_programas(id,nome,codigo)")
+        .order("updated_at", { ascending: false });
       return acoes ?? [];
     },
   });
@@ -65,6 +68,26 @@ function Dashboard() {
     return acc;
   }, {})).sort((a, b) => b.total - a.total).slice(0, 8);
 
+  const byEixo = Object.values(acoes.reduce<Record<string, { eixo: string; total: number; concluidas: number; percentual: number }>>((acc, a) => {
+    const nome = getEixoNome(a);
+    if (!acc[nome]) acc[nome] = { eixo: nome, total: 0, concluidas: 0, percentual: 0 };
+    acc[nome].total++;
+    acc[nome].percentual += a.percentual_execucao || 0;
+    if (a.status === "concluida") acc[nome].concluidas++;
+    return acc;
+  }, {})).map((e) => ({
+    ...e,
+    percentual: e.total ? Math.round(e.percentual / e.total) : 0,
+  })).sort((a, b) => a.eixo.localeCompare(b.eixo));
+
+  const byPrograma = Object.values(acoes.reduce<Record<string, { programa: string; total: number; concluidas: number }>>((acc, a) => {
+    const nome = getProgramaNome(a);
+    if (!acc[nome]) acc[nome] = { programa: nome, total: 0, concluidas: 0 };
+    acc[nome].total++;
+    if (a.status === "concluida") acc[nome].concluidas++;
+    return acc;
+  }, {})).sort((a, b) => b.total - a.total);
+
   const proximasVencer = acoes.filter((a) => {
     if (!a.prazo_final || a.status === "concluida") return false;
     const d = differenceInDays(parseISO(a.prazo_final), new Date());
@@ -99,6 +122,45 @@ function Dashboard() {
         </div>
         <Progress value={percGeral} />
       </Card>
+
+      <div className="grid lg:grid-cols-2 gap-4">
+        <Card className="p-6">
+          <h3 className="font-semibold mb-4">Execução por Eixo</h3>
+          {byEixo.length === 0 ? <Empty /> : (
+            <ul className="space-y-4">
+              {byEixo.map((e) => (
+                <li key={e.eixo}>
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{e.eixo}</p>
+                      <p className="text-xs text-muted-foreground">{e.concluidas} de {e.total} ações concluídas</p>
+                    </div>
+                    <p className="text-sm font-semibold text-primary">{e.percentual}%</p>
+                  </div>
+                  <Progress value={e.percentual} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card className="p-6">
+          <h3 className="font-semibold mb-4">Ações por Programa</h3>
+          {byPrograma.length === 0 ? <Empty /> : (
+            <ul className="divide-y">
+              {byPrograma.map((p) => (
+                <li key={p.programa} className="py-3 first:pt-0 last:pb-0">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium min-w-0 truncate">{p.programa}</p>
+                    <Badge variant="outline">{p.total}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">{p.concluidas} concluídas</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="p-6">
@@ -223,4 +285,12 @@ function KpiCard({ label, value, icon: Icon, tone = "primary" }: {
 
 function Empty({ text = "Sem dados ainda." }: { text?: string }) {
   return <p className="text-sm text-muted-foreground text-center py-8">{text}</p>;
+}
+
+function getEixoNome(acao: any) {
+  return acao.eixo?.nome ?? acao.eixo_estrategico ?? "Sem eixo";
+}
+
+function getProgramaNome(acao: any) {
+  return acao.programa_ref?.nome ?? acao.programa ?? "Sem programa";
 }
