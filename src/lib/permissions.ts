@@ -22,6 +22,7 @@ export function canAccessModule(level: PermissionLevel, module: string) {
     "/indicadores",
     "/relatorios",
     "/dashboard",
+    "/minhas-acoes",
     "/plano-acao",
     "/kanban",
     "/evidencias",
@@ -30,6 +31,7 @@ export function canAccessModule(level: PermissionLevel, module: string) {
 
   const responsibleModules = new Set([
     "/dashboard",
+    "/minhas-acoes",
     "/plano-acao",
     "/kanban",
     "/evidencias",
@@ -39,4 +41,3 @@ export function canAccessModule(level: PermissionLevel, module: string) {
   if (level === "manage") return managementModules.has(module);
   return responsibleModules.has(module);
 }
-

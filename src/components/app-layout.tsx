@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth";
 import { canAccessModule, type PermissionLevel } from "@/lib/permissions";
 import {
   LayoutDashboard,
+  ClipboardCheck,
   ListChecks,
   Kanban,
   Building2,
@@ -31,6 +32,7 @@ interface NavItem {
 
 const primaryNav: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/minhas-acoes", label: "Minhas Ações", icon: ClipboardCheck },
   { to: "/plano-acao", label: "PGA / Plano de Ação", icon: ListChecks },
   { to: "/kanban", label: "Kanban", icon: Kanban },
   { to: "/evidencias", label: "Evidências", icon: FileCheck2 },
