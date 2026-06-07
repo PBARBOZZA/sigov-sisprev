@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { createAcao } from "@/lib/acoes.functions";
@@ -41,10 +41,14 @@ import { differenceInDays, parseISO } from "date-fns";
 
 export const Route = createFileRoute("/_authenticated/plano-acao/")({
   head: () => ({ meta: [{ title: "Plano de Ação — SIGOV-SISPREV" }] }),
+  validateSearch: (search: Record<string, unknown>) => parseFiltersFromSearch(search),
   component: PlanoAcao,
 });
 
-const DEFAULT_FILTERS = {
+type FilterKey = "q" | "plano" | "status" | "eixo" | "programa" | "area" | "responsavel" | "prazo";
+type Filters = Record<FilterKey, string>;
+
+const DEFAULT_FILTERS: Filters = {
   q: "",
   plano: "all",
   status: "all",
@@ -56,7 +60,19 @@ const DEFAULT_FILTERS = {
 };
 
 type NomeRef = { nome: string | null };
+type RefOption = { id: string; nome: string | null };
+type PlanoOption = RefOption & { ano?: number | string | null };
 type PlanoAcaoRow = {
+  id?: string;
+  codigo?: string | null;
+  titulo?: string | null;
+  descricao?: string | null;
+  plano_anual_id?: string | null;
+  eixo_id?: string | null;
+  programa_id?: string | null;
+  area_id?: string | null;
+  responsavel_id?: string | null;
+  percentual_execucao?: number | null;
   area?: NomeRef | null;
   responsavel?: NomeRef | null;
   responsavel_nome?: string | null;
@@ -72,20 +88,42 @@ type CreateAcaoForm = Record<string, string | number | null>;
 
 function PlanoAcao() {
   const { canManage } = useAuth();
+  const search = Route.useSearch();
   const qc = useQueryClient();
   const createAcaoFn = useServerFn(createAcao);
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<Filters>(() => buildFilters(search));
   const [open, setOpen] = useState(false);
+  const isSimpleUser = !canManage;
+  const effectiveFilters = canManage ? filters : getSimpleUserFilters(filters);
 
-  const { data: acoes, isLoading } = useQuery({
+  useEffect(() => {
+    setFilters(buildFilters(search));
+  }, [
+    search.q,
+    search.plano,
+    search.status,
+    search.eixo,
+    search.programa,
+    search.area,
+    search.responsavel,
+    search.prazo,
+  ]);
+
+  const {
+    data: acoes,
+    isLoading,
+    error: acoesError,
+  } = useQuery({
     queryKey: ["acoes-list"],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("acoes")
-        .select(
-          "*, area:areas(id,nome), responsavel:profiles!acoes_responsavel_id_fkey(id,nome), plano:plano_anual(id,ano,nome), eixo:pga_eixos(id,nome,codigo), programa_ref:pga_programas(id,nome,codigo)",
-        )
+        .select("*")
         .order("prazo_final", { ascending: true });
+      if (error) {
+        console.error("[PGA/Plano de Ação] Erro ao consultar ações:", error);
+        throw error;
+      }
       return data ?? [];
     },
   });
@@ -121,44 +159,61 @@ function PlanoAcao() {
   });
 
   const filtered = (acoes ?? []).filter((a) => {
-    const eixoNome = getEixoNome(a);
-    const programaNome = getProgramaNome(a);
+    const eixoNome = getEixoNome(a, eixos);
+    const programaNome = getProgramaNome(a, programas);
+    const selectedEixoNome = resolveSelectedNome(effectiveFilters.eixo, eixos);
+    const selectedProgramaNome = resolveSelectedNome(effectiveFilters.programa, programas);
     if (
-      filters.q &&
+      effectiveFilters.q &&
       !`${a.titulo} ${a.codigo} ${a.descricao ?? ""} ${a.responsavel_nome ?? ""} ${eixoNome} ${programaNome}`
         .toLowerCase()
-        .includes(filters.q.toLowerCase())
+        .includes(effectiveFilters.q.toLowerCase())
     )
       return false;
-    if (filters.plano !== "all" && a.plano_anual_id !== filters.plano) return false;
-    if (filters.status !== "all" && a.status !== filters.status) return false;
-    if (filters.eixo !== "all" && eixoNome !== filters.eixo) return false;
-    if (filters.programa !== "all" && programaNome !== filters.programa) return false;
-    if (filters.area !== "all" && a.area_id !== filters.area) return false;
-    if (filters.responsavel !== "all") {
-      const nome = a.responsavel?.nome ?? a.responsavel_nome ?? "";
-      if (nome !== filters.responsavel) return false;
+    if (effectiveFilters.plano !== "all" && a.plano_anual_id !== effectiveFilters.plano)
+      return false;
+    if (effectiveFilters.status !== "all" && a.status !== effectiveFilters.status) return false;
+    if (
+      effectiveFilters.eixo !== "all" &&
+      !matchesRefOrLegacy(a.eixo_id, eixoNome, effectiveFilters.eixo, selectedEixoNome)
+    )
+      return false;
+    if (
+      effectiveFilters.programa !== "all" &&
+      !matchesRefOrLegacy(
+        a.programa_id,
+        programaNome,
+        effectiveFilters.programa,
+        selectedProgramaNome,
+      )
+    )
+      return false;
+    if (effectiveFilters.area !== "all" && a.area_id !== effectiveFilters.area) return false;
+    if (effectiveFilters.responsavel !== "all") {
+      const nome = getResponsavelNome(a, usuarios);
+      if (nome !== effectiveFilters.responsavel) return false;
     }
-    if (filters.prazo !== "all" && !matchesPrazoFilter(a, filters.prazo)) return false;
+    if (effectiveFilters.prazo !== "all" && !matchesPrazoFilter(a, effectiveFilters.prazo))
+      return false;
     return true;
   });
 
   const responsavelOptions = Array.from(
-    new Set((acoes ?? []).map((a) => a.responsavel?.nome ?? a.responsavel_nome).filter(Boolean)),
+    new Set((acoes ?? []).map((a) => getResponsavelNome(a, usuarios)).filter(Boolean)),
   ) as string[];
   const eixoOptions = Array.from(
     new Set([
-      ...(eixos ?? []).map((e) => e.nome),
+      ...(eixos ?? []).map((e) => e.nome).filter(Boolean),
       ...((acoes ?? []).map((a) => a.eixo_estrategico).filter(Boolean) as string[]),
     ]),
   );
   const programaOptions = Array.from(
     new Set([
-      ...(programas ?? []).map((p) => p.nome),
+      ...(programas ?? []).map((p) => p.nome).filter(Boolean),
       ...((acoes ?? []).map((a) => a.programa).filter(Boolean) as string[]),
     ]),
   );
-  const activeFilters = Object.entries(filters).filter(
+  const activeFilters = Object.entries(effectiveFilters).filter(
     ([key, value]) => value !== DEFAULT_FILTERS[key as keyof typeof DEFAULT_FILTERS],
   ).length;
   const statusResumo = {
@@ -221,7 +276,9 @@ function PlanoAcao() {
         <div>
           <h1 className="text-2xl font-bold">PGA / Plano de Ação</h1>
           <p className="text-sm text-muted-foreground">
-            Acompanhamento das ações institucionais por status, prazo e responsável.
+            {isSimpleUser
+              ? "Consulta simplificada das ações permitidas para seu perfil."
+              : "Acompanhamento das ações institucionais por status, prazo e responsável."}
           </p>
         </div>
         {canManage && (
@@ -328,6 +385,22 @@ function PlanoAcao() {
         )}
       </div>
 
+      {isSimpleUser && (
+        <Card className="p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Para sua rotina, use Minhas Ações</p>
+              <p className="text-xs text-muted-foreground">
+                Esta tela mostra apenas o que a RLS permite, com filtros reduzidos.
+              </p>
+            </div>
+            <Button asChild>
+              <Link to="/minhas-acoes">Abrir Minhas Ações</Link>
+            </Button>
+          </div>
+        </Card>
+      )}
+
       <Card className="p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -362,16 +435,18 @@ function PlanoAcao() {
               />
             </div>
           </div>
-          <SelectFilter
-            label="Plano"
-            value={filters.plano}
-            onChange={(v) => setFilters({ ...filters, plano: v })}
-            placeholder="Plano Anual"
-            options={[
-              { value: "all", label: "Todos planos" },
-              ...(planos ?? []).map((p) => ({ value: p.id, label: `${p.nome} (${p.ano})` })),
-            ]}
-          />
+          {canManage && (
+            <SelectFilter
+              label="Plano"
+              value={filters.plano}
+              onChange={(v) => setFilters({ ...filters, plano: v })}
+              placeholder="Plano Anual"
+              options={[
+                { value: "all", label: "Todos planos" },
+                ...(planos ?? []).map((p) => ({ value: p.id, label: `${p.nome} (${p.ano})` })),
+              ]}
+            />
+          )}
           <SelectFilter
             label="Status"
             value={filters.status}
@@ -382,46 +457,52 @@ function PlanoAcao() {
               ...Object.entries(STATUS_LABELS).map(([v, l]) => ({ value: v, label: l })),
             ]}
           />
-          <SelectFilter
-            label="Eixo"
-            value={filters.eixo}
-            onChange={(v) => setFilters({ ...filters, eixo: v })}
-            placeholder="Eixo"
-            options={[
-              { value: "all", label: "Todos eixos" },
-              ...eixoOptions.map((e) => ({ value: e, label: e })),
-            ]}
-          />
-          <SelectFilter
-            label="Programa"
-            value={filters.programa}
-            onChange={(v) => setFilters({ ...filters, programa: v })}
-            placeholder="Programa"
-            options={[
-              { value: "all", label: "Todos programas" },
-              ...programaOptions.map((p) => ({ value: p, label: p })),
-            ]}
-          />
-          <SelectFilter
-            label="Área"
-            value={filters.area}
-            onChange={(v) => setFilters({ ...filters, area: v })}
-            placeholder="Área"
-            options={[
-              { value: "all", label: "Todas áreas" },
-              ...(areas ?? []).map((a) => ({ value: a.id, label: a.nome })),
-            ]}
-          />
-          <SelectFilter
-            label="Responsável"
-            value={filters.responsavel}
-            onChange={(v) => setFilters({ ...filters, responsavel: v })}
-            placeholder="Responsável"
-            options={[
-              { value: "all", label: "Todos responsáveis" },
-              ...responsavelOptions.map((n) => ({ value: n, label: n })),
-            ]}
-          />
+          {canManage && (
+            <>
+              <SelectFilter
+                label="Eixo"
+                value={filters.eixo}
+                onChange={(v) => setFilters({ ...filters, eixo: v })}
+                placeholder="Eixo"
+                options={[
+                  { value: "all", label: "Todos eixos" },
+                  ...(eixos ?? []).map((e) => ({ value: e.id, label: e.nome })),
+                  ...eixoOptions.map((e) => ({ value: e, label: e })),
+                ]}
+              />
+              <SelectFilter
+                label="Programa"
+                value={filters.programa}
+                onChange={(v) => setFilters({ ...filters, programa: v })}
+                placeholder="Programa"
+                options={[
+                  { value: "all", label: "Todos programas" },
+                  ...(programas ?? []).map((p) => ({ value: p.id, label: p.nome })),
+                  ...programaOptions.map((p) => ({ value: p, label: p })),
+                ]}
+              />
+              <SelectFilter
+                label="Área"
+                value={filters.area}
+                onChange={(v) => setFilters({ ...filters, area: v })}
+                placeholder="Área"
+                options={[
+                  { value: "all", label: "Todas áreas" },
+                  ...(areas ?? []).map((a) => ({ value: a.id, label: a.nome })),
+                ]}
+              />
+              <SelectFilter
+                label="Responsável"
+                value={filters.responsavel}
+                onChange={(v) => setFilters({ ...filters, responsavel: v })}
+                placeholder="Responsável"
+                options={[
+                  { value: "all", label: "Todos responsáveis" },
+                  ...responsavelOptions.map((n) => ({ value: n, label: n })),
+                ]}
+              />
+            </>
+          )}
           <SelectFilter
             label="Prazo"
             value={filters.prazo}
@@ -437,22 +518,30 @@ function PlanoAcao() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <ResumoCard label="Ações filtradas" value={statusResumo.total} />
-        <ResumoCard label="Em andamento" value={statusResumo.emAndamento} tone="info" />
-        <ResumoCard label="Concluídas" value={statusResumo.concluidas} tone="success" />
-        <ResumoCard label="Atrasadas" value={statusResumo.atrasadas} tone="destructive" />
-      </div>
+      {canManage && (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <ResumoCard label="Ações filtradas" value={statusResumo.total} />
+          <ResumoCard label="Em andamento" value={statusResumo.emAndamento} tone="info" />
+          <ResumoCard label="Concluídas" value={statusResumo.concluidas} tone="success" />
+          <ResumoCard label="Atrasadas" value={statusResumo.atrasadas} tone="destructive" />
+        </div>
+      )}
 
       <Card>
         {isLoading ? (
           <div className="flex justify-center p-12">
             <Loader2 className="animate-spin h-6 w-6 text-primary" />
           </div>
+        ) : acoesError ? (
+          <div className="p-12 text-center text-sm text-destructive">
+            Não foi possível carregar as ações do PGA. Verifique o console para detalhes da
+            consulta.
+          </div>
         ) : filtered.length === 0 ? (
           <div className="p-12 text-center text-sm text-muted-foreground">
             <Filter className="h-8 w-8 mx-auto mb-2 opacity-40" />
-            Nenhuma ação encontrada.
+            Nenhuma ação encontrada com os filtros atuais. Tente limpar os filtros ou escolher outro
+            eixo/programa.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -489,17 +578,15 @@ function PlanoAcao() {
                       </td>
                       <td className="px-3 py-2 text-xs min-w-[240px]">
                         <div className="space-y-1">
-                          <p className="font-medium">{getPlanoNome(a)}</p>
-                          <p className="text-muted-foreground">{getEixoNome(a)}</p>
+                          <p className="font-medium">{getPlanoNome(a, planos)}</p>
+                          <p className="text-muted-foreground">{getEixoNome(a, eixos)}</p>
                           <p className="text-muted-foreground truncate max-w-xs">
-                            {getProgramaNome(a)}
+                            {getProgramaNome(a, programas)}
                           </p>
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-xs">{a.area?.nome ?? "—"}</td>
-                      <td className="px-3 py-2 text-xs">
-                        {a.responsavel?.nome ?? a.responsavel_nome ?? "—"}
-                      </td>
+                      <td className="px-3 py-2 text-xs">{getAreaNome(a, areas)}</td>
+                      <td className="px-3 py-2 text-xs">{getResponsavelNome(a, usuarios)}</td>
                       <td className="px-3 py-2 text-xs">
                         <div className="flex items-center gap-2">
                           <span>{fmtDate(a.prazo_final)}</span>
@@ -631,16 +718,88 @@ function ResumoCard({
   );
 }
 
-function getPlanoNome(acao: PlanoAcaoRow) {
-  return acao.plano?.nome ?? "Sem plano";
+function parseFiltersFromSearch(search: Record<string, unknown>) {
+  const parsed: Partial<Filters> = {};
+  (Object.keys(DEFAULT_FILTERS) as FilterKey[]).forEach((key) => {
+    const value = search[key];
+    if (typeof value === "string" && value.trim()) parsed[key] = value.trim();
+  });
+  return parsed;
 }
 
-function getEixoNome(acao: PlanoAcaoRow) {
-  return acao.eixo?.nome ?? acao.eixo_estrategico ?? "Sem eixo";
+function buildFilters(search: Partial<Filters>): Filters {
+  return { ...DEFAULT_FILTERS, ...search };
 }
 
-function getProgramaNome(acao: PlanoAcaoRow) {
-  return acao.programa_ref?.nome ?? acao.programa ?? "Sem programa";
+function getSimpleUserFilters(filters: Filters): Filters {
+  return {
+    ...filters,
+    plano: "all",
+    eixo: "all",
+    programa: "all",
+    area: "all",
+    responsavel: "all",
+  };
+}
+
+function getPlanoNome(acao: PlanoAcaoRow, planos?: PlanoOption[]) {
+  const planoNome = acao.plano_anual_id
+    ? planos?.find((plano) => plano.id === acao.plano_anual_id)?.nome
+    : null;
+  return planoNome ?? acao.plano?.nome ?? "Sem plano";
+}
+
+function getEixoNome(acao: PlanoAcaoRow, eixos?: RefOption[]) {
+  const eixoNome = acao.eixo_id ? eixos?.find((eixo) => eixo.id === acao.eixo_id)?.nome : null;
+  return eixoNome ?? acao.eixo?.nome ?? acao.eixo_estrategico ?? "Sem eixo";
+}
+
+function getProgramaNome(acao: PlanoAcaoRow, programas?: RefOption[]) {
+  const programaNome = acao.programa_id
+    ? programas?.find((programa) => programa.id === acao.programa_id)?.nome
+    : null;
+  return programaNome ?? acao.programa_ref?.nome ?? acao.programa ?? "Sem programa";
+}
+
+function getAreaNome(acao: PlanoAcaoRow, areas?: RefOption[]) {
+  return (
+    (acao.area_id ? areas?.find((area) => area.id === acao.area_id)?.nome : null) ??
+    acao.area?.nome ??
+    "—"
+  );
+}
+
+function getResponsavelNome(acao: PlanoAcaoRow, usuarios?: RefOption[]) {
+  return (
+    (acao.responsavel_id
+      ? usuarios?.find((usuario) => usuario.id === acao.responsavel_id)?.nome
+      : null) ??
+    acao.responsavel?.nome ??
+    acao.responsavel_nome ??
+    "—"
+  );
+}
+
+function matchesRefOrLegacy(
+  id: string | null | undefined,
+  resolvedName: string,
+  selected: string,
+  selectedName: string,
+) {
+  if (id && selected === id) return true;
+  return normalizeFilterValue(resolvedName) === normalizeFilterValue(selectedName);
+}
+
+function resolveSelectedNome(selected: string, options?: RefOption[]) {
+  return options?.find((option) => option.id === selected)?.nome ?? selected;
+}
+
+function normalizeFilterValue(value: string | null | undefined) {
+  return (value ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }
 
 function matchesPrazoFilter(acao: PlanoAcaoRow, filter: string) {
