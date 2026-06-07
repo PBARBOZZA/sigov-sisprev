@@ -4,11 +4,28 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
-  ListChecks, Clock, CheckCircle2, AlertTriangle, AlarmClock, TrendingUp, Loader2
+  ListChecks,
+  Clock,
+  CheckCircle2,
+  AlertTriangle,
+  AlarmClock,
+  TrendingUp,
+  Loader2,
 } from "lucide-react";
 import {
-  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend, CartesianGrid
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  ResponsiveContainer,
+  Tooltip,
+  Legend,
+  CartesianGrid,
 } from "recharts";
 import { STATUS_LABELS, fmtDate, prazoCor } from "@/lib/acao-helpers";
 import { differenceInDays, parseISO } from "date-fns";
@@ -19,8 +36,22 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 const STATUS_COLOR_HEX: Record<string, string> = {
-  nao_iniciada: "#94a3b8", em_andamento: "#0ea5e9",
-  concluida: "#16a34a", atrasada: "#dc2626", cancelada: "#64748b",
+  nao_iniciada: "#94a3b8",
+  em_andamento: "#0ea5e9",
+  concluida: "#16a34a",
+  atrasada: "#dc2626",
+  cancelada: "#64748b",
+};
+
+type NomeRef = { nome: string | null };
+type DashboardAcao = {
+  area?: NomeRef | null;
+  responsavel?: NomeRef | null;
+  responsavel_nome?: string | null;
+  eixo?: NomeRef | null;
+  programa_ref?: NomeRef | null;
+  eixo_estrategico?: string | null;
+  programa?: string | null;
 };
 
 function Dashboard() {
@@ -29,111 +60,195 @@ function Dashboard() {
     queryFn: async () => {
       const { data: acoes } = await supabase
         .from("acoes")
-        .select("*, area:areas(nome), responsavel:profiles!acoes_responsavel_id_fkey(nome), plano:plano_anual(id,ano,nome), eixo:pga_eixos(id,nome,codigo), programa_ref:pga_programas(id,nome,codigo)")
+        .select(
+          "*, area:areas(nome), responsavel:profiles!acoes_responsavel_id_fkey(nome), plano:plano_anual(id,ano,nome), eixo:pga_eixos(id,nome,codigo), programa_ref:pga_programas(id,nome,codigo)",
+        )
         .order("updated_at", { ascending: false });
       return acoes ?? [];
     },
   });
 
-  if (isLoading) return <div className="flex justify-center p-12"><Loader2 className="animate-spin h-6 w-6 text-primary" /></div>;
+  if (isLoading)
+    return (
+      <div className="flex justify-center p-12">
+        <Loader2 className="animate-spin h-6 w-6 text-primary" />
+      </div>
+    );
   const acoes = data ?? [];
 
   const total = acoes.length;
-  const byStatus = acoes.reduce<Record<string, number>>((acc, a) => { acc[a.status] = (acc[a.status] || 0) + 1; return acc; }, {});
+  const byStatus = acoes.reduce<Record<string, number>>((acc, a) => {
+    acc[a.status] = (acc[a.status] || 0) + 1;
+    return acc;
+  }, {});
   const concluidas = byStatus.concluida || 0;
   const emAnd = byStatus.em_andamento || 0;
   const naoIni = byStatus.nao_iniciada || 0;
-  const atrasadas = acoes.filter((a) => a.prazo_final && a.status !== "concluida" && a.status !== "cancelada" && differenceInDays(parseISO(a.prazo_final), new Date()) < 0).length;
+  const canceladas = byStatus.cancelada || 0;
+  const atrasadas = acoes.filter(
+    (a) =>
+      a.prazo_final &&
+      a.status !== "concluida" &&
+      a.status !== "cancelada" &&
+      differenceInDays(parseISO(a.prazo_final), new Date()) < 0,
+  ).length;
   const vencendo30 = acoes.filter((a) => {
     if (!a.prazo_final || a.status === "concluida" || a.status === "cancelada") return false;
     const d = differenceInDays(parseISO(a.prazo_final), new Date());
     return d >= 0 && d <= 30;
   }).length;
-  const percGeral = total ? Math.round(acoes.reduce((s, a) => s + (a.percentual_execucao || 0), 0) / total) : 0;
+  const percGeral = total
+    ? Math.round(acoes.reduce((s, a) => s + (a.percentual_execucao || 0), 0) / total)
+    : 0;
+  const percConcluidas = total ? Math.round((concluidas / total) * 100) : 0;
+  const emAberto = Math.max(total - concluidas - canceladas, 0);
 
-  const pieData = Object.entries(byStatus).map(([s, v]) => ({ name: STATUS_LABELS[s] ?? s, value: v, key: s }));
+  const pieData = Object.entries(byStatus).map(([s, v]) => ({
+    name: STATUS_LABELS[s] ?? s,
+    value: v,
+    key: s,
+  }));
 
-  const byArea = Object.values(acoes.reduce<Record<string, { area: string; total: number; concluidas: number }>>((acc, a) => {
-    const nome = (a as any).area?.nome ?? "Sem área";
-    if (!acc[nome]) acc[nome] = { area: nome, total: 0, concluidas: 0 };
-    acc[nome].total++;
-    if (a.status === "concluida") acc[nome].concluidas++;
-    return acc;
-  }, {}));
+  const byArea = Object.values(
+    acoes.reduce<Record<string, { area: string; total: number; concluidas: number }>>((acc, a) => {
+      const nome = a.area?.nome ?? "Sem área";
+      if (!acc[nome]) acc[nome] = { area: nome, total: 0, concluidas: 0 };
+      acc[nome].total++;
+      if (a.status === "concluida") acc[nome].concluidas++;
+      return acc;
+    }, {}),
+  );
 
-  const byResp = Object.values(acoes.reduce<Record<string, { resp: string; total: number }>>((acc, a) => {
-    const nome = (a as any).responsavel?.nome ?? (a as any).responsavel_nome ?? "Sem responsável";
-    if (!acc[nome]) acc[nome] = { resp: nome, total: 0 };
-    acc[nome].total++;
-    return acc;
-  }, {})).sort((a, b) => b.total - a.total).slice(0, 8);
+  const byResp = Object.values(
+    acoes.reduce<Record<string, { resp: string; total: number }>>((acc, a) => {
+      const nome = a.responsavel?.nome ?? a.responsavel_nome ?? "Sem responsável";
+      if (!acc[nome]) acc[nome] = { resp: nome, total: 0 };
+      acc[nome].total++;
+      return acc;
+    }, {}),
+  )
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 8);
 
-  const byEixo = Object.values(acoes.reduce<Record<string, { eixo: string; total: number; concluidas: number; percentual: number }>>((acc, a) => {
-    const nome = getEixoNome(a);
-    if (!acc[nome]) acc[nome] = { eixo: nome, total: 0, concluidas: 0, percentual: 0 };
-    acc[nome].total++;
-    acc[nome].percentual += a.percentual_execucao || 0;
-    if (a.status === "concluida") acc[nome].concluidas++;
-    return acc;
-  }, {})).map((e) => ({
-    ...e,
-    percentual: e.total ? Math.round(e.percentual / e.total) : 0,
-  })).sort((a, b) => a.eixo.localeCompare(b.eixo));
+  const byEixo = Object.values(
+    acoes.reduce<
+      Record<string, { eixo: string; total: number; concluidas: number; percentual: number }>
+    >((acc, a) => {
+      const nome = getEixoNome(a);
+      if (!acc[nome]) acc[nome] = { eixo: nome, total: 0, concluidas: 0, percentual: 0 };
+      acc[nome].total++;
+      acc[nome].percentual += a.percentual_execucao || 0;
+      if (a.status === "concluida") acc[nome].concluidas++;
+      return acc;
+    }, {}),
+  )
+    .map((e) => ({
+      ...e,
+      percentual: e.total ? Math.round(e.percentual / e.total) : 0,
+    }))
+    .sort((a, b) => a.eixo.localeCompare(b.eixo));
 
-  const byPrograma = Object.values(acoes.reduce<Record<string, { programa: string; total: number; concluidas: number }>>((acc, a) => {
-    const nome = getProgramaNome(a);
-    if (!acc[nome]) acc[nome] = { programa: nome, total: 0, concluidas: 0 };
-    acc[nome].total++;
-    if (a.status === "concluida") acc[nome].concluidas++;
-    return acc;
-  }, {})).sort((a, b) => b.total - a.total);
+  const byPrograma = Object.values(
+    acoes.reduce<Record<string, { programa: string; total: number; concluidas: number }>>(
+      (acc, a) => {
+        const nome = getProgramaNome(a);
+        if (!acc[nome]) acc[nome] = { programa: nome, total: 0, concluidas: 0 };
+        acc[nome].total++;
+        if (a.status === "concluida") acc[nome].concluidas++;
+        return acc;
+      },
+      {},
+    ),
+  ).sort((a, b) => b.total - a.total);
 
-  const proximasVencer = acoes.filter((a) => {
-    if (!a.prazo_final || a.status === "concluida") return false;
-    const d = differenceInDays(parseISO(a.prazo_final), new Date());
-    return d >= 0 && d <= 30;
-  }).slice(0, 5);
+  const proximasVencer = acoes
+    .filter((a) => {
+      if (!a.prazo_final || a.status === "concluida") return false;
+      const d = differenceInDays(parseISO(a.prazo_final), new Date());
+      return d >= 0 && d <= 30;
+    })
+    .slice(0, 5);
 
   const ultimasAtualizadas = acoes.slice(0, 5);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Dashboard Executivo</h1>
-        <p className="text-sm text-muted-foreground">Visão gerencial do Plano de Gestão Anual e Pró-Gestão RPPS.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Resumo do PGA / Plano de Ação para acompanhamento diário.
+          </p>
+        </div>
+        <Button asChild variant="outline">
+          <Link to="/plano-acao">Ver Plano de Ação</Link>
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <KpiCard label="Total de ações" value={total} icon={ListChecks} />
-        <KpiCard label="Não iniciadas" value={naoIni} icon={Clock} tone="muted" />
-        <KpiCard label="Em andamento" value={emAnd} icon={TrendingUp} tone="info" />
-        <KpiCard label="Concluídas" value={concluidas} icon={CheckCircle2} tone="success" />
+        <KpiCard
+          label="Total de ações"
+          value={total}
+          description={`${emAberto} em aberto`}
+          icon={ListChecks}
+        />
+        <KpiCard
+          label="Em andamento"
+          value={emAnd}
+          description="Execução ativa"
+          icon={TrendingUp}
+          tone="info"
+        />
+        <KpiCard
+          label="Concluídas"
+          value={concluidas}
+          description={`${percConcluidas}% do total`}
+          icon={CheckCircle2}
+          tone="success"
+        />
         <KpiCard label="Atrasadas" value={atrasadas} icon={AlertTriangle} tone="destructive" />
         <KpiCard label="Vencendo 30d" value={vencendo30} icon={AlarmClock} tone="warning" />
+        <KpiCard label="Não iniciadas" value={naoIni} icon={Clock} tone="muted" />
       </div>
 
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-3">
+      <Card className="p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
-            <p className="text-sm font-medium">Percentual geral de execução</p>
-            <p className="text-xs text-muted-foreground">Média ponderada de todas as ações ativas</p>
+            <p className="text-sm font-medium">Execução geral</p>
+            <p className="text-xs text-muted-foreground">
+              Média simples do percentual informado nas ações.
+            </p>
           </div>
           <p className="text-3xl font-bold text-primary">{percGeral}%</p>
         </div>
         <Progress value={percGeral} />
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <StatusOverview label="Concluídas" value={concluidas} total={total} tone="success" />
+          <StatusOverview label="Em aberto" value={emAberto} total={total} tone="primary" />
+          <StatusOverview
+            label="Atenção"
+            value={atrasadas + vencendo30}
+            total={total}
+            tone="warning"
+          />
+        </div>
       </Card>
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="p-6">
           <h3 className="font-semibold mb-4">Execução por Eixo</h3>
-          {byEixo.length === 0 ? <Empty /> : (
+          {byEixo.length === 0 ? (
+            <Empty />
+          ) : (
             <ul className="space-y-4">
               {byEixo.map((e) => (
                 <li key={e.eixo}>
                   <div className="flex items-center justify-between gap-3 mb-2">
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{e.eixo}</p>
-                      <p className="text-xs text-muted-foreground">{e.concluidas} de {e.total} ações concluídas</p>
+                      <p className="text-xs text-muted-foreground">
+                        {e.concluidas} de {e.total} ações concluídas
+                      </p>
                     </div>
                     <p className="text-sm font-semibold text-primary">{e.percentual}%</p>
                   </div>
@@ -146,7 +261,9 @@ function Dashboard() {
 
         <Card className="p-6">
           <h3 className="font-semibold mb-4">Ações por Programa</h3>
-          {byPrograma.length === 0 ? <Empty /> : (
+          {byPrograma.length === 0 ? (
+            <Empty />
+          ) : (
             <ul className="divide-y">
               {byPrograma.map((p) => (
                 <li key={p.programa} className="py-3 first:pt-0 last:pb-0">
@@ -165,14 +282,27 @@ function Dashboard() {
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="p-6">
           <h3 className="font-semibold mb-4">Ações por status</h3>
-          {pieData.length === 0 ? <Empty /> : (
+          {pieData.length === 0 ? (
+            <Empty />
+          ) : (
             <div className="h-64">
               <ResponsiveContainer>
                 <PieChart>
-                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
-                    {pieData.map((d) => <Cell key={d.key} fill={STATUS_COLOR_HEX[d.key] || "#94a3b8"} />)}
+                  <Pie
+                    data={pieData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    label
+                  >
+                    {pieData.map((d) => (
+                      <Cell key={d.key} fill={STATUS_COLOR_HEX[d.key] || "#94a3b8"} />
+                    ))}
                   </Pie>
-                  <Tooltip /><Legend />
+                  <Tooltip />
+                  <Legend />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -180,12 +310,20 @@ function Dashboard() {
         </Card>
         <Card className="p-6">
           <h3 className="font-semibold mb-4">Ações por área</h3>
-          {byArea.length === 0 ? <Empty /> : (
+          {byArea.length === 0 ? (
+            <Empty />
+          ) : (
             <div className="h-64">
               <ResponsiveContainer>
                 <BarChart data={byArea}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="area" tick={{ fontSize: 10 }} angle={-15} textAnchor="end" height={60} />
+                  <XAxis
+                    dataKey="area"
+                    tick={{ fontSize: 10 }}
+                    angle={-15}
+                    textAnchor="end"
+                    height={60}
+                  />
                   <YAxis tick={{ fontSize: 10 }} />
                   <Tooltip />
                   <Bar dataKey="total" fill="hsl(var(--primary))" name="Total" />
@@ -199,7 +337,9 @@ function Dashboard() {
 
       <Card className="p-6">
         <h3 className="font-semibold mb-4">Top responsáveis por carga de ações</h3>
-        {byResp.length === 0 ? <Empty /> : (
+        {byResp.length === 0 ? (
+          <Empty />
+        ) : (
           <div className="h-56">
             <ResponsiveContainer>
               <BarChart data={byResp} layout="vertical">
@@ -217,16 +357,24 @@ function Dashboard() {
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="p-6">
           <h3 className="font-semibold mb-3">Ações vencendo nos próximos 30 dias</h3>
-          {proximasVencer.length === 0 ? <Empty text="Nenhuma ação próxima do vencimento." /> : (
+          {proximasVencer.length === 0 ? (
+            <Empty text="Nenhuma ação próxima do vencimento." />
+          ) : (
             <ul className="space-y-2">
               {proximasVencer.map((a) => {
                 const pz = prazoCor(a.prazo_final, a.status);
                 return (
                   <li key={a.id}>
-                    <Link to="/plano-acao/$id" params={{ id: a.id }} className="flex items-center justify-between gap-3 p-3 rounded-md border hover:bg-accent">
+                    <Link
+                      to="/plano-acao/$id"
+                      params={{ id: a.id }}
+                      className="flex items-center justify-between gap-3 p-3 rounded-md border hover:bg-accent"
+                    >
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{a.titulo}</p>
-                        <p className="text-xs text-muted-foreground">{(a as any).area?.nome ?? "—"} · {fmtDate(a.prazo_final)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {a.area?.nome ?? "—"} · {fmtDate(a.prazo_final)}
+                        </p>
                       </div>
                       <Badge className={pz.color}>{pz.label}</Badge>
                     </Link>
@@ -238,14 +386,23 @@ function Dashboard() {
         </Card>
         <Card className="p-6">
           <h3 className="font-semibold mb-3">Últimas ações atualizadas</h3>
-          {ultimasAtualizadas.length === 0 ? <Empty /> : (
+          {ultimasAtualizadas.length === 0 ? (
+            <Empty />
+          ) : (
             <ul className="space-y-2">
               {ultimasAtualizadas.map((a) => (
                 <li key={a.id}>
-                  <Link to="/plano-acao/$id" params={{ id: a.id }} className="flex items-center justify-between gap-3 p-3 rounded-md border hover:bg-accent">
+                  <Link
+                    to="/plano-acao/$id"
+                    params={{ id: a.id }}
+                    className="flex items-center justify-between gap-3 p-3 rounded-md border hover:bg-accent"
+                  >
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{a.titulo}</p>
-                      <p className="text-xs text-muted-foreground">{(a as any).responsavel?.nome ?? (a as any).responsavel_nome ?? "—"} · {a.percentual_execucao}%</p>
+                      <p className="text-xs text-muted-foreground">
+                        {a.responsavel?.nome ?? a.responsavel_nome ?? "—"} · {a.percentual_execucao}
+                        %
+                      </p>
                     </div>
                     <Badge variant="outline">{STATUS_LABELS[a.status]}</Badge>
                   </Link>
@@ -259,27 +416,66 @@ function Dashboard() {
   );
 }
 
-function KpiCard({ label, value, icon: Icon, tone = "primary" }: {
-  label: string; value: number; icon: React.ComponentType<{ className?: string }>; tone?: string;
+function KpiCard({
+  label,
+  value,
+  description,
+  icon: Icon,
+  tone = "primary",
+}: {
+  label: string;
+  value: number;
+  description?: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tone?: string;
 }) {
   const toneMap: Record<string, string> = {
-    primary: "bg-primary/10 text-primary",
-    success: "bg-success/15 text-success",
-    info: "bg-info/15 text-info",
-    warning: "bg-warning/20 text-warning-foreground",
-    destructive: "bg-destructive/15 text-destructive",
-    muted: "bg-muted text-muted-foreground",
+    primary: "bg-primary/10 text-primary border-primary/20",
+    success: "bg-success/15 text-success border-success/25",
+    info: "bg-info/15 text-info border-info/25",
+    warning: "bg-warning/20 text-warning-foreground border-warning/30",
+    destructive: "bg-destructive/15 text-destructive border-destructive/25",
+    muted: "bg-muted text-muted-foreground border-border",
   };
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between mb-2">
-        <div className={`grid h-8 w-8 place-items-center rounded-md ${toneMap[tone]}`}>
+        <div className={`grid h-8 w-8 place-items-center rounded-md border ${toneMap[tone]}`}>
           <Icon className="h-4 w-4" />
         </div>
       </div>
       <p className="text-2xl font-bold">{value}</p>
       <p className="text-xs text-muted-foreground">{label}</p>
+      {description && <p className="mt-1 text-[11px] text-muted-foreground">{description}</p>}
     </Card>
+  );
+}
+
+function StatusOverview({
+  label,
+  value,
+  total,
+  tone,
+}: {
+  label: string;
+  value: number;
+  total: number;
+  tone: "primary" | "success" | "warning";
+}) {
+  const percent = total ? Math.round((value / total) * 100) : 0;
+  const toneMap = {
+    primary: "text-primary",
+    success: "text-success",
+    warning: "text-warning-foreground",
+  };
+  return (
+    <div className="rounded-md border bg-muted/30 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        <p className={`text-sm font-semibold ${toneMap[tone]}`}>{percent}%</p>
+      </div>
+      <p className="mt-1 text-lg font-bold">{value}</p>
+    </div>
   );
 }
 
@@ -287,10 +483,10 @@ function Empty({ text = "Sem dados ainda." }: { text?: string }) {
   return <p className="text-sm text-muted-foreground text-center py-8">{text}</p>;
 }
 
-function getEixoNome(acao: any) {
+function getEixoNome(acao: DashboardAcao) {
   return acao.eixo?.nome ?? acao.eixo_estrategico ?? "Sem eixo";
 }
 
-function getProgramaNome(acao: any) {
+function getProgramaNome(acao: DashboardAcao) {
   return acao.programa_ref?.nome ?? acao.programa ?? "Sem programa";
 }

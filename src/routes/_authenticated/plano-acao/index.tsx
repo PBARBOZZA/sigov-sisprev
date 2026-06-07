@@ -10,11 +10,32 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Search, Loader2, Filter } from "lucide-react";
-import { STATUS_LABELS, PRIORIDADE_LABELS, EIXOS, PROGRAMAS, PERIODICIDADES, fmtDate, prazoCor } from "@/lib/acao-helpers";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Plus, Search, Loader2, Filter, X } from "lucide-react";
+import {
+  STATUS_LABELS,
+  PRIORIDADE_LABELS,
+  EIXOS,
+  PROGRAMAS,
+  PERIODICIDADES,
+  fmtDate,
+  prazoCor,
+} from "@/lib/acao-helpers";
 import { toast } from "sonner";
 import { differenceInDays, parseISO } from "date-fns";
 
@@ -23,20 +44,37 @@ export const Route = createFileRoute("/_authenticated/plano-acao/")({
   component: PlanoAcao,
 });
 
+const DEFAULT_FILTERS = {
+  q: "",
+  plano: "all",
+  status: "all",
+  eixo: "all",
+  programa: "all",
+  area: "all",
+  responsavel: "all",
+  prazo: "all",
+};
+
+type NomeRef = { nome: string | null };
+type PlanoAcaoRow = {
+  area?: NomeRef | null;
+  responsavel?: NomeRef | null;
+  responsavel_nome?: string | null;
+  plano?: NomeRef | null;
+  eixo?: NomeRef | null;
+  programa_ref?: NomeRef | null;
+  eixo_estrategico?: string | null;
+  programa?: string | null;
+  prazo_final?: string | null;
+  status?: string | null;
+};
+type CreateAcaoForm = Record<string, string | number | null>;
+
 function PlanoAcao() {
   const { canManage } = useAuth();
   const qc = useQueryClient();
   const createAcaoFn = useServerFn(createAcao);
-  const [filters, setFilters] = useState({
-    q: "",
-    plano: "all",
-    status: "all",
-    eixo: "all",
-    programa: "all",
-    area: "all",
-    responsavel: "all",
-    prazo: "all",
-  });
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [open, setOpen] = useState(false);
 
   const { data: acoes, isLoading } = useQuery({
@@ -44,7 +82,9 @@ function PlanoAcao() {
     queryFn: async () => {
       const { data } = await supabase
         .from("acoes")
-        .select("*, area:areas(id,nome), responsavel:profiles!acoes_responsavel_id_fkey(id,nome), plano:plano_anual(id,ano,nome), eixo:pga_eixos(id,nome,codigo), programa_ref:pga_programas(id,nome,codigo)")
+        .select(
+          "*, area:areas(id,nome), responsavel:profiles!acoes_responsavel_id_fkey(id,nome), plano:plano_anual(id,ano,nome), eixo:pga_eixos(id,nome,codigo), programa_ref:pga_programas(id,nome,codigo)",
+        )
         .order("prazo_final", { ascending: true });
       return data ?? [];
     },
@@ -52,17 +92,21 @@ function PlanoAcao() {
 
   const { data: planos } = useQuery({
     queryKey: ["planos-options"],
-    queryFn: async () => (await supabase.from("plano_anual").select("id,ano,nome").order("ano", { ascending: false })).data ?? [],
+    queryFn: async () =>
+      (await supabase.from("plano_anual").select("id,ano,nome").order("ano", { ascending: false }))
+        .data ?? [],
   });
 
   const { data: eixos } = useQuery({
     queryKey: ["pga-eixos-options"],
-    queryFn: async () => (await supabase.from("pga_eixos").select("id,nome,ordem").order("ordem")).data ?? [],
+    queryFn: async () =>
+      (await supabase.from("pga_eixos").select("id,nome,ordem").order("ordem")).data ?? [],
   });
 
   const { data: programas } = useQuery({
     queryKey: ["pga-programas-options"],
-    queryFn: async () => (await supabase.from("pga_programas").select("id,nome,ordem").order("ordem")).data ?? [],
+    queryFn: async () =>
+      (await supabase.from("pga_programas").select("id,nome,ordem").order("ordem")).data ?? [],
   });
 
   const { data: areas } = useQuery({
@@ -72,38 +116,60 @@ function PlanoAcao() {
 
   const { data: usuarios } = useQuery({
     queryKey: ["usuarios-options"],
-    queryFn: async () => (await supabase.from("profiles").select("id,nome").order("nome")).data ?? [],
+    queryFn: async () =>
+      (await supabase.from("profiles").select("id,nome").order("nome")).data ?? [],
   });
 
   const filtered = (acoes ?? []).filter((a) => {
     const eixoNome = getEixoNome(a);
     const programaNome = getProgramaNome(a);
-    if (filters.q && !`${a.titulo} ${a.codigo} ${a.descricao ?? ""} ${a.responsavel_nome ?? ""} ${eixoNome} ${programaNome}`.toLowerCase().includes(filters.q.toLowerCase())) return false;
+    if (
+      filters.q &&
+      !`${a.titulo} ${a.codigo} ${a.descricao ?? ""} ${a.responsavel_nome ?? ""} ${eixoNome} ${programaNome}`
+        .toLowerCase()
+        .includes(filters.q.toLowerCase())
+    )
+      return false;
     if (filters.plano !== "all" && a.plano_anual_id !== filters.plano) return false;
     if (filters.status !== "all" && a.status !== filters.status) return false;
     if (filters.eixo !== "all" && eixoNome !== filters.eixo) return false;
     if (filters.programa !== "all" && programaNome !== filters.programa) return false;
     if (filters.area !== "all" && a.area_id !== filters.area) return false;
     if (filters.responsavel !== "all") {
-      const nome = (a as any).responsavel?.nome ?? a.responsavel_nome ?? "";
+      const nome = a.responsavel?.nome ?? a.responsavel_nome ?? "";
       if (nome !== filters.responsavel) return false;
     }
     if (filters.prazo !== "all" && !matchesPrazoFilter(a, filters.prazo)) return false;
     return true;
   });
 
-  const responsavelOptions = Array.from(new Set((acoes ?? []).map((a) => (a as any).responsavel?.nome ?? a.responsavel_nome).filter(Boolean))) as string[];
-  const eixoOptions = Array.from(new Set([
-    ...(eixos ?? []).map((e) => e.nome),
-    ...((acoes ?? []).map((a) => a.eixo_estrategico).filter(Boolean) as string[]),
-  ]));
-  const programaOptions = Array.from(new Set([
-    ...(programas ?? []).map((p) => p.nome),
-    ...((acoes ?? []).map((a) => a.programa).filter(Boolean) as string[]),
-  ]));
+  const responsavelOptions = Array.from(
+    new Set((acoes ?? []).map((a) => a.responsavel?.nome ?? a.responsavel_nome).filter(Boolean)),
+  ) as string[];
+  const eixoOptions = Array.from(
+    new Set([
+      ...(eixos ?? []).map((e) => e.nome),
+      ...((acoes ?? []).map((a) => a.eixo_estrategico).filter(Boolean) as string[]),
+    ]),
+  );
+  const programaOptions = Array.from(
+    new Set([
+      ...(programas ?? []).map((p) => p.nome),
+      ...((acoes ?? []).map((a) => a.programa).filter(Boolean) as string[]),
+    ]),
+  );
+  const activeFilters = Object.entries(filters).filter(
+    ([key, value]) => value !== DEFAULT_FILTERS[key as keyof typeof DEFAULT_FILTERS],
+  ).length;
+  const statusResumo = {
+    total: filtered.length,
+    emAndamento: filtered.filter((a) => a.status === "em_andamento").length,
+    concluidas: filtered.filter((a) => a.status === "concluida").length,
+    atrasadas: filtered.filter((a) => matchesPrazoFilter(a, "atrasadas")).length,
+  };
 
   const createMutation = useMutation({
-    mutationFn: async (form: any) => {
+    mutationFn: async (form: CreateAcaoForm) => {
       await createAcaoFn({ data: form });
     },
     onSuccess: () => {
@@ -112,7 +178,7 @@ function PlanoAcao() {
       qc.invalidateQueries({ queryKey: ["dashboard-acoes"] });
       setOpen(false);
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: Error) => toast.error(e.message),
   });
 
   function onCreate(e: React.FormEvent<HTMLFormElement>) {
@@ -153,16 +219,23 @@ function PlanoAcao() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Plano de Ação</h1>
-          <p className="text-sm text-muted-foreground">Acompanhamento das ações institucionais do PGA.</p>
+          <h1 className="text-2xl font-bold">PGA / Plano de Ação</h1>
+          <p className="text-sm text-muted-foreground">
+            Acompanhamento das ações institucionais por status, prazo e responsável.
+          </p>
         </div>
         {canManage && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button><Plus className="h-4 w-4 mr-2" />Nova ação</Button>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Nova ação
+              </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>Nova ação</DialogTitle></DialogHeader>
+              <DialogHeader>
+                <DialogTitle>Nova ação</DialogTitle>
+              </DialogHeader>
               <form onSubmit={onCreate} className="space-y-3">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <Field label="Código" name="codigo" required />
@@ -177,28 +250,76 @@ function PlanoAcao() {
                   <Textarea name="objetivo" rows={2} />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <SelectField label="Programa" name="programa" options={PROGRAMAS.map(p => ({ value: p, label: p }))} />
-                  <SelectField label="Eixo estratégico" name="eixo" options={EIXOS.map(e => ({ value: e, label: e }))} />
-                  <SelectField label="Área *" name="area" options={(areas ?? []).map(a => ({ value: a.id, label: a.nome }))} />
-                  <SelectField label="Responsável (cadastrado)" name="responsavel" options={(usuarios ?? []).map(u => ({ value: u.id, label: u.nome }))} />
-                  <Field label="Responsável (texto livre)" name="responsavel_nome" placeholder="Use se não há cadastro" />
-                  <SelectField label="Periodicidade" name="periodicidade" options={PERIODICIDADES.map(p => ({ value: p, label: p }))} />
+                  <SelectField
+                    label="Programa"
+                    name="programa"
+                    options={PROGRAMAS.map((p) => ({ value: p, label: p }))}
+                  />
+                  <SelectField
+                    label="Eixo estratégico"
+                    name="eixo"
+                    options={EIXOS.map((e) => ({ value: e, label: e }))}
+                  />
+                  <SelectField
+                    label="Área *"
+                    name="area"
+                    options={(areas ?? []).map((a) => ({ value: a.id, label: a.nome }))}
+                  />
+                  <SelectField
+                    label="Responsável (cadastrado)"
+                    name="responsavel"
+                    options={(usuarios ?? []).map((u) => ({ value: u.id, label: u.nome }))}
+                  />
+                  <Field
+                    label="Responsável (texto livre)"
+                    name="responsavel_nome"
+                    placeholder="Use se não há cadastro"
+                  />
+                  <SelectField
+                    label="Periodicidade"
+                    name="periodicidade"
+                    options={PERIODICIDADES.map((p) => ({ value: p, label: p }))}
+                  />
                   <Field label="Data início" name="data_inicio" type="date" />
                   <Field label="Prazo final" name="prazo_final" type="date" />
-                  <SelectField label="Status *" name="status" defaultValue="nao_iniciada"
-                    options={Object.entries(STATUS_LABELS).map(([v, l]) => ({ value: v, label: l }))} />
-                  <SelectField label="Prioridade" name="prioridade" defaultValue="media"
-                    options={Object.entries(PRIORIDADE_LABELS).map(([v, l]) => ({ value: v, label: l }))} />
-                  <Field label="% Execução" name="percentual" type="number" min={0} max={100} defaultValue="0" />
+                  <SelectField
+                    label="Status *"
+                    name="status"
+                    defaultValue="nao_iniciada"
+                    options={Object.entries(STATUS_LABELS).map(([v, l]) => ({
+                      value: v,
+                      label: l,
+                    }))}
+                  />
+                  <SelectField
+                    label="Prioridade"
+                    name="prioridade"
+                    defaultValue="media"
+                    options={Object.entries(PRIORIDADE_LABELS).map(([v, l]) => ({
+                      value: v,
+                      label: l,
+                    }))}
+                  />
+                  <Field
+                    label="% Execução"
+                    name="percentual"
+                    type="number"
+                    min={0}
+                    max={100}
+                    defaultValue="0"
+                  />
                 </div>
                 <div>
                   <Label>Observações</Label>
                   <Textarea name="observacoes" rows={2} />
                 </div>
                 <DialogFooter>
-                  <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
+                  <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+                    Cancelar
+                  </Button>
                   <Button type="submit" disabled={createMutation.isPending}>
-                    {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Criar
+                    {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                    Criar
                   </Button>
                 </DialogFooter>
               </form>
@@ -208,38 +329,126 @@ function PlanoAcao() {
       </div>
 
       <Card className="p-4">
-        <div className="flex flex-wrap gap-2 items-center">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Pesquisar por título, código ou descrição"
-              value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })}
-              className="pl-9" />
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold">Filtros</p>
+            <p className="text-xs text-muted-foreground">
+              {activeFilters
+                ? `${activeFilters} filtro(s) aplicado(s)`
+                : "Mostrando todas as ações"}
+            </p>
           </div>
-          <SelectFilter value={filters.plano} onChange={(v) => setFilters({ ...filters, plano: v })}
-            placeholder="Plano Anual" options={[{ value: "all", label: "Todos planos" }, ...(planos ?? []).map(p => ({ value: p.id, label: `${p.nome} (${p.ano})` }))]} />
-          <SelectFilter value={filters.status} onChange={(v) => setFilters({ ...filters, status: v })}
-            placeholder="Status" options={[{ value: "all", label: "Todos status" }, ...Object.entries(STATUS_LABELS).map(([v, l]) => ({ value: v, label: l }))]} />
-          <SelectFilter value={filters.eixo} onChange={(v) => setFilters({ ...filters, eixo: v })}
-            placeholder="Eixo" options={[{ value: "all", label: "Todos eixos" }, ...eixoOptions.map(e => ({ value: e, label: e }))]} />
-          <SelectFilter value={filters.programa} onChange={(v) => setFilters({ ...filters, programa: v })}
-            placeholder="Programa" options={[{ value: "all", label: "Todos programas" }, ...programaOptions.map(p => ({ value: p, label: p }))]} />
-          <SelectFilter value={filters.area} onChange={(v) => setFilters({ ...filters, area: v })}
-            placeholder="Área" options={[{ value: "all", label: "Todas áreas" }, ...(areas ?? []).map(a => ({ value: a.id, label: a.nome }))]} />
-          <SelectFilter value={filters.responsavel} onChange={(v) => setFilters({ ...filters, responsavel: v })}
-            placeholder="Responsável" options={[{ value: "all", label: "Todos responsáveis" }, ...responsavelOptions.map(n => ({ value: n, label: n }))]} />
-          <SelectFilter value={filters.prazo} onChange={(v) => setFilters({ ...filters, prazo: v })}
-            placeholder="Prazo" options={[
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setFilters(DEFAULT_FILTERS)}
+            disabled={!activeFilters}
+          >
+            <X className="h-4 w-4 mr-2" />
+            Limpar
+          </Button>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="space-y-1 md:col-span-2">
+            <Label>Busca</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Título, código, descrição, eixo ou responsável"
+                value={filters.q}
+                onChange={(e) => setFilters({ ...filters, q: e.target.value })}
+                className="pl-9"
+              />
+            </div>
+          </div>
+          <SelectFilter
+            label="Plano"
+            value={filters.plano}
+            onChange={(v) => setFilters({ ...filters, plano: v })}
+            placeholder="Plano Anual"
+            options={[
+              { value: "all", label: "Todos planos" },
+              ...(planos ?? []).map((p) => ({ value: p.id, label: `${p.nome} (${p.ano})` })),
+            ]}
+          />
+          <SelectFilter
+            label="Status"
+            value={filters.status}
+            onChange={(v) => setFilters({ ...filters, status: v })}
+            placeholder="Status"
+            options={[
+              { value: "all", label: "Todos status" },
+              ...Object.entries(STATUS_LABELS).map(([v, l]) => ({ value: v, label: l })),
+            ]}
+          />
+          <SelectFilter
+            label="Eixo"
+            value={filters.eixo}
+            onChange={(v) => setFilters({ ...filters, eixo: v })}
+            placeholder="Eixo"
+            options={[
+              { value: "all", label: "Todos eixos" },
+              ...eixoOptions.map((e) => ({ value: e, label: e })),
+            ]}
+          />
+          <SelectFilter
+            label="Programa"
+            value={filters.programa}
+            onChange={(v) => setFilters({ ...filters, programa: v })}
+            placeholder="Programa"
+            options={[
+              { value: "all", label: "Todos programas" },
+              ...programaOptions.map((p) => ({ value: p, label: p })),
+            ]}
+          />
+          <SelectFilter
+            label="Área"
+            value={filters.area}
+            onChange={(v) => setFilters({ ...filters, area: v })}
+            placeholder="Área"
+            options={[
+              { value: "all", label: "Todas áreas" },
+              ...(areas ?? []).map((a) => ({ value: a.id, label: a.nome })),
+            ]}
+          />
+          <SelectFilter
+            label="Responsável"
+            value={filters.responsavel}
+            onChange={(v) => setFilters({ ...filters, responsavel: v })}
+            placeholder="Responsável"
+            options={[
+              { value: "all", label: "Todos responsáveis" },
+              ...responsavelOptions.map((n) => ({ value: n, label: n })),
+            ]}
+          />
+          <SelectFilter
+            label="Prazo"
+            value={filters.prazo}
+            onChange={(v) => setFilters({ ...filters, prazo: v })}
+            placeholder="Prazo"
+            options={[
               { value: "all", label: "Todos prazos" },
               { value: "atrasadas", label: "Atrasadas" },
               { value: "vence_30", label: "Vencem em 30 dias" },
               { value: "sem_prazo", label: "Sem prazo" },
-            ]} />
+            ]}
+          />
         </div>
       </Card>
 
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <ResumoCard label="Ações filtradas" value={statusResumo.total} />
+        <ResumoCard label="Em andamento" value={statusResumo.emAndamento} tone="info" />
+        <ResumoCard label="Concluídas" value={statusResumo.concluidas} tone="success" />
+        <ResumoCard label="Atrasadas" value={statusResumo.atrasadas} tone="destructive" />
+      </div>
+
       <Card>
         {isLoading ? (
-          <div className="flex justify-center p-12"><Loader2 className="animate-spin h-6 w-6 text-primary" /></div>
+          <div className="flex justify-center p-12">
+            <Loader2 className="animate-spin h-6 w-6 text-primary" />
+          </div>
         ) : filtered.length === 0 ? (
           <div className="p-12 text-center text-sm text-muted-foreground">
             <Filter className="h-8 w-8 mx-auto mb-2 opacity-40" />
@@ -250,8 +459,14 @@ function PlanoAcao() {
             <table className="w-full text-sm">
               <thead className="bg-muted/50 border-b">
                 <tr className="text-left">
-                  <Th>Código</Th><Th>Título</Th><Th>Plano / Eixo / Programa</Th><Th>Área</Th><Th>Responsável</Th>
-                  <Th>Prazo</Th><Th>%</Th><Th>Status</Th>
+                  <Th>Código</Th>
+                  <Th>Título</Th>
+                  <Th>Plano / Eixo / Programa</Th>
+                  <Th>Área</Th>
+                  <Th>Responsável</Th>
+                  <Th>Prazo</Th>
+                  <Th>%</Th>
+                  <Th>Status</Th>
                 </tr>
               </thead>
               <tbody>
@@ -261,26 +476,44 @@ function PlanoAcao() {
                     <tr key={a.id} className="border-b last:border-0 hover:bg-accent/30">
                       <td className="px-3 py-2 font-mono text-xs">{a.codigo}</td>
                       <td className="px-3 py-2">
-                        <Link to="/plano-acao/$id" params={{ id: a.id }} className="font-medium hover:underline">{a.titulo}</Link>
-                        <p className="text-xs text-muted-foreground truncate max-w-md">{a.descricao ?? "—"}</p>
+                        <Link
+                          to="/plano-acao/$id"
+                          params={{ id: a.id }}
+                          className="font-medium hover:underline"
+                        >
+                          {a.titulo}
+                        </Link>
+                        <p className="text-xs text-muted-foreground truncate max-w-md">
+                          {a.descricao ?? "—"}
+                        </p>
                       </td>
                       <td className="px-3 py-2 text-xs min-w-[240px]">
                         <div className="space-y-1">
                           <p className="font-medium">{getPlanoNome(a)}</p>
                           <p className="text-muted-foreground">{getEixoNome(a)}</p>
-                          <p className="text-muted-foreground truncate max-w-xs">{getProgramaNome(a)}</p>
+                          <p className="text-muted-foreground truncate max-w-xs">
+                            {getProgramaNome(a)}
+                          </p>
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-xs">{(a as any).area?.nome ?? "—"}</td>
-                      <td className="px-3 py-2 text-xs">{(a as any).responsavel?.nome ?? a.responsavel_nome ?? "—"}</td>
+                      <td className="px-3 py-2 text-xs">{a.area?.nome ?? "—"}</td>
+                      <td className="px-3 py-2 text-xs">
+                        {a.responsavel?.nome ?? a.responsavel_nome ?? "—"}
+                      </td>
                       <td className="px-3 py-2 text-xs">
                         <div className="flex items-center gap-2">
                           <span>{fmtDate(a.prazo_final)}</span>
-                          {pz.dias !== null && <Badge className={`${pz.color} text-[10px]`}>{pz.label}</Badge>}
+                          {pz.dias !== null && (
+                            <Badge className={`${pz.color} text-[10px]`}>{pz.label}</Badge>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-2 text-xs font-medium">{a.percentual_execucao}%</td>
-                      <td className="px-3 py-2"><Badge variant="outline" className="text-xs">{STATUS_LABELS[a.status]}</Badge></td>
+                      <td className="px-3 py-2">
+                        <Badge variant="outline" className="text-xs">
+                          {STATUS_LABELS[a.status]}
+                        </Badge>
+                      </td>
                     </tr>
                   );
                 })}
@@ -294,7 +527,11 @@ function PlanoAcao() {
 }
 
 function Th({ children }: { children: React.ReactNode }) {
-  return <th className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">{children}</th>;
+  return (
+    <th className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+      {children}
+    </th>
+  );
 }
 
 function Field(props: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
@@ -307,44 +544,106 @@ function Field(props: React.InputHTMLAttributes<HTMLInputElement> & { label: str
   );
 }
 
-function SelectField({ label, name, options, defaultValue }: { label: string; name: string; options: { value: string; label: string }[]; defaultValue?: string }) {
+function SelectField({
+  label,
+  name,
+  options,
+  defaultValue,
+}: {
+  label: string;
+  name: string;
+  options: { value: string; label: string }[];
+  defaultValue?: string;
+}) {
   const [v, setV] = useState(defaultValue ?? "");
   return (
     <div>
       <Label>{label}</Label>
       <input type="hidden" name={name} value={v} />
       <Select value={v} onValueChange={setV}>
-        <SelectTrigger><SelectValue placeholder={`Selecione ${label.toLowerCase()}`} /></SelectTrigger>
+        <SelectTrigger>
+          <SelectValue placeholder={`Selecione ${label.toLowerCase()}`} />
+        </SelectTrigger>
         <SelectContent>
-          {options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
     </div>
   );
 }
 
-function SelectFilter({ value, onChange, options, placeholder }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; placeholder: string }) {
+function SelectFilter({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  placeholder: string;
+}) {
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="w-[180px]"><SelectValue placeholder={placeholder} /></SelectTrigger>
-      <SelectContent>{options.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
-    </Select>
+    <div className="space-y-1">
+      <Label>{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
 
-function getPlanoNome(acao: any) {
+function ResumoCard({
+  label,
+  value,
+  tone = "primary",
+}: {
+  label: string;
+  value: number;
+  tone?: "primary" | "info" | "success" | "destructive";
+}) {
+  const toneMap = {
+    primary: "text-primary",
+    info: "text-info",
+    success: "text-success",
+    destructive: "text-destructive",
+  };
+  return (
+    <Card className="p-4">
+      <p className={`text-2xl font-bold ${toneMap[tone]}`}>{value}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
+    </Card>
+  );
+}
+
+function getPlanoNome(acao: PlanoAcaoRow) {
   return acao.plano?.nome ?? "Sem plano";
 }
 
-function getEixoNome(acao: any) {
+function getEixoNome(acao: PlanoAcaoRow) {
   return acao.eixo?.nome ?? acao.eixo_estrategico ?? "Sem eixo";
 }
 
-function getProgramaNome(acao: any) {
+function getProgramaNome(acao: PlanoAcaoRow) {
   return acao.programa_ref?.nome ?? acao.programa ?? "Sem programa";
 }
 
-function matchesPrazoFilter(acao: any, filter: string) {
+function matchesPrazoFilter(acao: PlanoAcaoRow, filter: string) {
   if (filter === "sem_prazo") return !acao.prazo_final;
   if (!acao.prazo_final || acao.status === "concluida" || acao.status === "cancelada") return false;
   const dias = differenceInDays(parseISO(acao.prazo_final), new Date());
