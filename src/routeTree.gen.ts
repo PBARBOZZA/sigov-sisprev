@@ -16,6 +16,7 @@ import { Route as AuthenticatedUsuariosRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedRelatoriosRouteImport } from './routes/_authenticated/relatorios'
 import { Route as AuthenticatedProgestaoRouteImport } from './routes/_authenticated/progestao'
 import { Route as AuthenticatedNotificacoesRouteImport } from './routes/_authenticated/notificacoes'
+import { Route as AuthenticatedMinhasAcoesRouteImport } from './routes/_authenticated/minhas-acoes'
 import { Route as AuthenticatedKanbanRouteImport } from './routes/_authenticated/kanban'
 import { Route as AuthenticatedIndicadoresRouteImport } from './routes/_authenticated/indicadores'
 import { Route as AuthenticatedEvidenciasRouteImport } from './routes/_authenticated/evidencias'
@@ -57,6 +58,12 @@ const AuthenticatedNotificacoesRoute =
   AuthenticatedNotificacoesRouteImport.update({
     id: '/notificacoes',
     path: '/notificacoes',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedMinhasAcoesRoute =
+  AuthenticatedMinhasAcoesRouteImport.update({
+    id: '/minhas-acoes',
+    path: '/minhas-acoes',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedKanbanRoute = AuthenticatedKanbanRouteImport.update({
@@ -106,6 +113,7 @@ export interface FileRoutesByFullPath {
   '/evidencias': typeof AuthenticatedEvidenciasRoute
   '/indicadores': typeof AuthenticatedIndicadoresRoute
   '/kanban': typeof AuthenticatedKanbanRoute
+  '/minhas-acoes': typeof AuthenticatedMinhasAcoesRoute
   '/notificacoes': typeof AuthenticatedNotificacoesRoute
   '/progestao': typeof AuthenticatedProgestaoRoute
   '/relatorios': typeof AuthenticatedRelatoriosRoute
@@ -121,6 +129,7 @@ export interface FileRoutesByTo {
   '/evidencias': typeof AuthenticatedEvidenciasRoute
   '/indicadores': typeof AuthenticatedIndicadoresRoute
   '/kanban': typeof AuthenticatedKanbanRoute
+  '/minhas-acoes': typeof AuthenticatedMinhasAcoesRoute
   '/notificacoes': typeof AuthenticatedNotificacoesRoute
   '/progestao': typeof AuthenticatedProgestaoRoute
   '/relatorios': typeof AuthenticatedRelatoriosRoute
@@ -138,6 +147,7 @@ export interface FileRoutesById {
   '/_authenticated/evidencias': typeof AuthenticatedEvidenciasRoute
   '/_authenticated/indicadores': typeof AuthenticatedIndicadoresRoute
   '/_authenticated/kanban': typeof AuthenticatedKanbanRoute
+  '/_authenticated/minhas-acoes': typeof AuthenticatedMinhasAcoesRoute
   '/_authenticated/notificacoes': typeof AuthenticatedNotificacoesRoute
   '/_authenticated/progestao': typeof AuthenticatedProgestaoRoute
   '/_authenticated/relatorios': typeof AuthenticatedRelatoriosRoute
@@ -155,6 +165,7 @@ export interface FileRouteTypes {
     | '/evidencias'
     | '/indicadores'
     | '/kanban'
+    | '/minhas-acoes'
     | '/notificacoes'
     | '/progestao'
     | '/relatorios'
@@ -170,6 +181,7 @@ export interface FileRouteTypes {
     | '/evidencias'
     | '/indicadores'
     | '/kanban'
+    | '/minhas-acoes'
     | '/notificacoes'
     | '/progestao'
     | '/relatorios'
@@ -186,6 +198,7 @@ export interface FileRouteTypes {
     | '/_authenticated/evidencias'
     | '/_authenticated/indicadores'
     | '/_authenticated/kanban'
+    | '/_authenticated/minhas-acoes'
     | '/_authenticated/notificacoes'
     | '/_authenticated/progestao'
     | '/_authenticated/relatorios'
@@ -251,6 +264,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedNotificacoesRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/minhas-acoes': {
+      id: '/_authenticated/minhas-acoes'
+      path: '/minhas-acoes'
+      fullPath: '/minhas-acoes'
+      preLoaderRoute: typeof AuthenticatedMinhasAcoesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/kanban': {
       id: '/_authenticated/kanban'
       path: '/kanban'
@@ -309,6 +329,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedEvidenciasRoute: typeof AuthenticatedEvidenciasRoute
   AuthenticatedIndicadoresRoute: typeof AuthenticatedIndicadoresRoute
   AuthenticatedKanbanRoute: typeof AuthenticatedKanbanRoute
+  AuthenticatedMinhasAcoesRoute: typeof AuthenticatedMinhasAcoesRoute
   AuthenticatedNotificacoesRoute: typeof AuthenticatedNotificacoesRoute
   AuthenticatedProgestaoRoute: typeof AuthenticatedProgestaoRoute
   AuthenticatedRelatoriosRoute: typeof AuthenticatedRelatoriosRoute
@@ -323,6 +344,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedEvidenciasRoute: AuthenticatedEvidenciasRoute,
   AuthenticatedIndicadoresRoute: AuthenticatedIndicadoresRoute,
   AuthenticatedKanbanRoute: AuthenticatedKanbanRoute,
+  AuthenticatedMinhasAcoesRoute: AuthenticatedMinhasAcoesRoute,
   AuthenticatedNotificacoesRoute: AuthenticatedNotificacoesRoute,
   AuthenticatedProgestaoRoute: AuthenticatedProgestaoRoute,
   AuthenticatedRelatoriosRoute: AuthenticatedRelatoriosRoute,
@@ -343,3 +365,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
