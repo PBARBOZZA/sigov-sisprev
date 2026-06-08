@@ -32,7 +32,6 @@ export function canAccessModule(level: PermissionLevel, module: string) {
   const responsibleModules = new Set([
     "/dashboard",
     "/minhas-acoes",
-    "/plano-acao",
     "/kanban",
     "/evidencias",
     "/notificacoes",
