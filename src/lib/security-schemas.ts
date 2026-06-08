@@ -1,7 +1,13 @@
 import { z } from "zod";
 
 export const APP_ROLES = ["admin", "diretoria", "responsavel", "conselheiro"] as const;
-export const ACAO_STATUS = ["nao_iniciada", "em_andamento", "concluida", "atrasada", "cancelada"] as const;
+export const ACAO_STATUS = [
+  "nao_iniciada",
+  "em_andamento",
+  "concluida",
+  "atrasada",
+  "cancelada",
+] as const;
 export const ACAO_PRIORIDADES = ["baixa", "media", "alta", "critica"] as const;
 
 export const MAX_EVIDENCIA_BYTES = 10 * 1024 * 1024;
@@ -14,12 +20,27 @@ export const EVIDENCIA_MIME_TYPES = [
 ] as const;
 
 const optionalText = (max: number) =>
-  z.string().trim().max(max).optional().nullable().transform((value) => value || null);
+  z
+    .string()
+    .trim()
+    .max(max)
+    .optional()
+    .nullable()
+    .transform((value) => value || null);
 
 const requiredText = (label: string, min: number, max: number) =>
-  z.string({ required_error: `${label} e obrigatorio.` }).trim().min(min, `${label} e obrigatorio.`).max(max);
+  z
+    .string({ required_error: `${label} e obrigatorio.` })
+    .trim()
+    .min(min, `${label} e obrigatorio.`)
+    .max(max);
 
-const optionalUuid = z.string().uuid().optional().nullable().transform((value) => value || null);
+const optionalUuid = z
+  .string()
+  .uuid()
+  .optional()
+  .nullable()
+  .transform((value) => value || null);
 
 const dateString = z
   .string()
@@ -28,7 +49,10 @@ const dateString = z
 
 const optionalDate = z.preprocess(
   (value) => (value === "" ? null : value),
-  dateString.optional().nullable().transform((value) => value || null),
+  dateString
+    .optional()
+    .nullable()
+    .transform((value) => value || null),
 );
 
 export const createUsuarioSchema = z.object({
@@ -69,31 +93,58 @@ const acaoBaseSchema = z.object({
   observacoes: optionalText(3000),
 });
 
-export const createAcaoSchema = acaoBaseSchema
-  .superRefine((data, ctx) => {
-    if (!data.responsavel_id && !data.responsavel_nome) {
-      ctx.addIssue({ code: "custom", path: ["responsavel_id"], message: "Informe um responsavel." });
-    }
-    if (data.data_inicio && data.prazo_final && data.data_inicio > data.prazo_final) {
-      ctx.addIssue({ code: "custom", path: ["prazo_final"], message: "Prazo final deve ser igual ou posterior a data de inicio." });
-    }
-  });
+export const createAcaoSchema = acaoBaseSchema.superRefine((data, ctx) => {
+  if (!data.responsavel_id && !data.responsavel_nome) {
+    ctx.addIssue({ code: "custom", path: ["responsavel_id"], message: "Informe um responsavel." });
+  }
+  if (data.data_inicio && data.prazo_final && data.data_inicio > data.prazo_final) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["prazo_final"],
+      message: "Prazo final deve ser igual ou posterior a data de inicio.",
+    });
+  }
+});
 
 export const updateAcaoSchema = acaoBaseSchema
   .partial()
   .extend({ id: z.string().uuid() })
   .superRefine((data, ctx) => {
     if (data.data_inicio && data.prazo_final && data.data_inicio > data.prazo_final) {
-      ctx.addIssue({ code: "custom", path: ["prazo_final"], message: "Prazo final deve ser igual ou posterior a data de inicio." });
+      ctx.addIssue({
+        code: "custom",
+        path: ["prazo_final"],
+        message: "Prazo final deve ser igual ou posterior a data de inicio.",
+      });
     }
   });
 
 export const evidenciaUploadSchema = z.object({
   acao_id: z.string().uuid(),
-  nome_arquivo: requiredText("Nome do arquivo", 1, 180).refine((value) => !/[\\/:*?"<>|]/.test(value), "Nome do arquivo invalido."),
-  tipo_arquivo: z.enum(EVIDENCIA_MIME_TYPES, { errorMap: () => ({ message: "Tipo de arquivo nao permitido." }) }),
-  tamanho: z.number().int().positive().max(MAX_EVIDENCIA_BYTES, "Arquivo acima do limite de 10 MB."),
+  nome_arquivo: requiredText("Nome do arquivo", 1, 180).refine(
+    (value) => !/[\\/:*?"<>|]/.test(value),
+    "Nome do arquivo invalido.",
+  ),
+  tipo_arquivo: z.enum(EVIDENCIA_MIME_TYPES, {
+    errorMap: () => ({ message: "Tipo de arquivo nao permitido." }),
+  }),
+  tamanho: z
+    .number()
+    .int()
+    .positive()
+    .max(MAX_EVIDENCIA_BYTES, "Arquivo acima do limite de 10 MB."),
   observacao: optionalText(1000),
+});
+
+export const vincularResponsavelAcaoSchema = z.object({
+  acao_id: z.string().uuid(),
+  responsavel_id: z.string().uuid(),
+  atualizar_responsavel_nome: z.boolean().default(true),
+});
+
+export const apoiadorAcaoSchema = z.object({
+  acao_id: z.string().uuid(),
+  usuario_id: z.string().uuid(),
 });
 
 export type CreateUsuarioInput = z.infer<typeof createUsuarioSchema>;

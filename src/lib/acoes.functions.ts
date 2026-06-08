@@ -2,9 +2,11 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import {
+  apoiadorAcaoSchema,
   createAcaoSchema,
   evidenciaUploadSchema,
   updateAcaoSchema,
+  vincularResponsavelAcaoSchema,
   type EvidenciaUploadInput,
 } from "@/lib/security-schemas";
 import { isBootstrapAdminEmail } from "@/lib/permissions";
@@ -23,6 +25,13 @@ async function getRoles(supabase: any, userId: string, email?: string | null) {
 
 function isManager(roles: string[]) {
   return roles.includes("admin") || roles.includes("diretoria");
+}
+
+async function assertManager(supabase: any, userId: string, email?: string | null) {
+  const roles = await getRoles(supabase, userId, email);
+  if (!isManager(roles)) {
+    throw new Error("Apenas administradores ou gestores podem alterar vinculos da acao.");
+  }
 }
 
 function toAcaoInsert(data: any) {
@@ -54,7 +63,12 @@ function sanitizeFileName(name: string) {
     .slice(0, 140);
 }
 
-async function assertEvidencePermission(supabase: any, userId: string, acaoId: string, email?: string | null) {
+async function assertEvidencePermission(
+  supabase: any,
+  userId: string,
+  acaoId: string,
+  email?: string | null,
+) {
   const roles = await getRoles(supabase, userId, email);
   const { data: acao, error } = await supabase
     .from("acoes")
@@ -120,11 +134,91 @@ export const updateAcao = createServerFn({ method: "POST" })
     return { id };
   });
 
+export const vincularResponsavelAcao = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(vincularResponsavelAcaoSchema)
+  .handler(async ({ data, context }) => {
+    await assertManager(context.supabase, context.userId, (context.claims as any)?.email);
+
+    const { data: profile, error: profileError } = await context.supabase
+      .from("profiles")
+      .select("id,nome,status")
+      .eq("id", data.responsavel_id)
+      .maybeSingle();
+    if (profileError) throw new Error(profileError.message);
+    if (!profile) throw new Error("Usuario responsavel nao encontrado.");
+    if (profile.status === false) throw new Error("Usuario responsavel esta inativo.");
+
+    const patch: Record<string, string | null> = { responsavel_id: profile.id };
+    if (data.atualizar_responsavel_nome) patch.responsavel_nome = profile.nome;
+
+    const { error } = await context.supabase.from("acoes").update(patch).eq("id", data.acao_id);
+    if (error) throw new Error(error.message);
+
+    return { acao_id: data.acao_id, responsavel_id: profile.id, responsavel_nome: profile.nome };
+  });
+
+export const adicionarApoiadorAcao = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(apoiadorAcaoSchema)
+  .handler(async ({ data, context }) => {
+    await assertManager(context.supabase, context.userId, (context.claims as any)?.email);
+
+    const { data: profile, error: profileError } = await context.supabase
+      .from("profiles")
+      .select("id,nome,status")
+      .eq("id", data.usuario_id)
+      .maybeSingle();
+    if (profileError) throw new Error(profileError.message);
+    if (!profile) throw new Error("Usuario apoiador nao encontrado.");
+    if (profile.status === false) throw new Error("Usuario apoiador esta inativo.");
+
+    const { data: existente, error: existenteError } = await context.supabase
+      .from("acoes_apoiadores")
+      .select("id")
+      .eq("acao_id", data.acao_id)
+      .eq("usuario_id", data.usuario_id)
+      .limit(1)
+      .maybeSingle();
+    if (existenteError) throw new Error(existenteError.message);
+    if (existente) return { id: existente.id, acao_id: data.acao_id, usuario_id: data.usuario_id };
+
+    const { data: criado, error } = await context.supabase
+      .from("acoes_apoiadores")
+      .insert({ acao_id: data.acao_id, usuario_id: data.usuario_id })
+      .select("id")
+      .single();
+    if (error) throw new Error(error.message);
+
+    return { id: criado.id, acao_id: data.acao_id, usuario_id: data.usuario_id };
+  });
+
+export const removerApoiadorAcao = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(apoiadorAcaoSchema)
+  .handler(async ({ data, context }) => {
+    await assertManager(context.supabase, context.userId, (context.claims as any)?.email);
+
+    const { error } = await context.supabase
+      .from("acoes_apoiadores")
+      .delete()
+      .eq("acao_id", data.acao_id)
+      .eq("usuario_id", data.usuario_id);
+    if (error) throw new Error(error.message);
+
+    return { acao_id: data.acao_id, usuario_id: data.usuario_id };
+  });
+
 export const prepareEvidenceUpload = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(evidenciaUploadSchema)
   .handler(async ({ data, context }) => {
-    await assertEvidencePermission(context.supabase, context.userId, data.acao_id, (context.claims as any)?.email);
+    await assertEvidencePermission(
+      context.supabase,
+      context.userId,
+      data.acao_id,
+      (context.claims as any)?.email,
+    );
 
     const safeName = sanitizeFileName(data.nome_arquivo);
     if (!safeName) throw new Error("Nome do arquivo invalido.");
@@ -137,7 +231,12 @@ export const registerEvidenceUpload = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(registerEvidenceSchema)
   .handler(async ({ data, context }) => {
-    await assertEvidencePermission(context.supabase, context.userId, data.acao_id, (context.claims as any)?.email);
+    await assertEvidencePermission(
+      context.supabase,
+      context.userId,
+      data.acao_id,
+      (context.claims as any)?.email,
+    );
     validateEvidencePath(data, context.userId, data.caminho_arquivo);
 
     const { error } = await context.supabase.from("evidencias").insert({
