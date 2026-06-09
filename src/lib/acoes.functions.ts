@@ -152,7 +152,7 @@ export const vincularResponsavelAcao = createServerFn({ method: "POST" })
     const patch: Record<string, string | null> = { responsavel_id: profile.id };
     if (data.atualizar_responsavel_nome) patch.responsavel_nome = profile.nome;
 
-    const { error } = await context.supabase.from("acoes").update(patch).eq("id", data.acao_id);
+    const { error } = await context.supabase.from("acoes").update(patch as any).eq("id", data.acao_id);
     if (error) throw new Error(error.message);
 
     return { acao_id: data.acao_id, responsavel_id: profile.id, responsavel_nome: profile.nome };
