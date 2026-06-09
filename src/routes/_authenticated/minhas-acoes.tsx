@@ -224,7 +224,7 @@ async function buscarAcoesApoiador(acaoIds: string[], select: string) {
     .in("id", acaoIds)
     .order("prazo_final", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as Omit<AcaoUsuario, "papel">[];
+  return (data ?? []) as unknown as Omit<AcaoUsuario, "papel">[];
 }
 
 function combinarAcoes(
