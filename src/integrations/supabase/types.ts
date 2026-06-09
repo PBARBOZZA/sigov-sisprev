@@ -22,14 +22,17 @@ export type Database = {
           data_inicio: string | null
           descricao: string | null
           eixo_estrategico: string | null
+          eixo_id: string | null
           id: string
           objetivo: string | null
           observacoes: string | null
           percentual_execucao: number
           periodicidade: string | null
+          plano_anual_id: string | null
           prazo_final: string | null
           prioridade: Database["public"]["Enums"]["acao_prioridade"]
           programa: string | null
+          programa_id: string | null
           projeto: string | null
           responsavel_id: string | null
           responsavel_nome: string | null
@@ -44,14 +47,17 @@ export type Database = {
           data_inicio?: string | null
           descricao?: string | null
           eixo_estrategico?: string | null
+          eixo_id?: string | null
           id?: string
           objetivo?: string | null
           observacoes?: string | null
           percentual_execucao?: number
           periodicidade?: string | null
+          plano_anual_id?: string | null
           prazo_final?: string | null
           prioridade?: Database["public"]["Enums"]["acao_prioridade"]
           programa?: string | null
+          programa_id?: string | null
           projeto?: string | null
           responsavel_id?: string | null
           responsavel_nome?: string | null
@@ -66,14 +72,17 @@ export type Database = {
           data_inicio?: string | null
           descricao?: string | null
           eixo_estrategico?: string | null
+          eixo_id?: string | null
           id?: string
           objetivo?: string | null
           observacoes?: string | null
           percentual_execucao?: number
           periodicidade?: string | null
+          plano_anual_id?: string | null
           prazo_final?: string | null
           prioridade?: Database["public"]["Enums"]["acao_prioridade"]
           programa?: string | null
+          programa_id?: string | null
           projeto?: string | null
           responsavel_id?: string | null
           responsavel_nome?: string | null
@@ -87,6 +96,34 @@ export type Database = {
             columns: ["area_id"]
             isOneToOne: false
             referencedRelation: "areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "acoes_eixo_id_fkey"
+            columns: ["eixo_id"]
+            isOneToOne: false
+            referencedRelation: "pga_eixos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "acoes_plano_anual_id_fkey"
+            columns: ["plano_anual_id"]
+            isOneToOne: false
+            referencedRelation: "plano_anual"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "acoes_programa_id_fkey"
+            columns: ["programa_id"]
+            isOneToOne: false
+            referencedRelation: "pga_programas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "acoes_responsavel_id_fkey"
+            columns: ["responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -351,6 +388,171 @@ export type Database = {
         }
         Relationships: []
       }
+      pga_eixos: {
+        Row: {
+          codigo: string
+          created_at: string
+          descricao: string | null
+          id: string
+          nome: string
+          ordem: number | null
+          plano_anual_id: string
+          responsavel_id: string | null
+          status: boolean
+          updated_at: string
+        }
+        Insert: {
+          codigo: string
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome: string
+          ordem?: number | null
+          plano_anual_id: string
+          responsavel_id?: string | null
+          status?: boolean
+          updated_at?: string
+        }
+        Update: {
+          codigo?: string
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome?: string
+          ordem?: number | null
+          plano_anual_id?: string
+          responsavel_id?: string | null
+          status?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pga_eixos_plano_anual_id_fkey"
+            columns: ["plano_anual_id"]
+            isOneToOne: false
+            referencedRelation: "plano_anual"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pga_programas: {
+        Row: {
+          area_responsavel_id: string | null
+          codigo: string
+          created_at: string
+          descricao: string | null
+          eixo_id: string
+          id: string
+          nome: string
+          objetivo: string | null
+          ordem: number | null
+          plano_anual_id: string
+          responsavel_id: string | null
+          status: boolean
+          updated_at: string
+        }
+        Insert: {
+          area_responsavel_id?: string | null
+          codigo: string
+          created_at?: string
+          descricao?: string | null
+          eixo_id: string
+          id?: string
+          nome: string
+          objetivo?: string | null
+          ordem?: number | null
+          plano_anual_id: string
+          responsavel_id?: string | null
+          status?: boolean
+          updated_at?: string
+        }
+        Update: {
+          area_responsavel_id?: string | null
+          codigo?: string
+          created_at?: string
+          descricao?: string | null
+          eixo_id?: string
+          id?: string
+          nome?: string
+          objetivo?: string | null
+          ordem?: number | null
+          plano_anual_id?: string
+          responsavel_id?: string | null
+          status?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pga_programas_area_responsavel_id_fkey"
+            columns: ["area_responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pga_programas_eixo_id_fkey"
+            columns: ["eixo_id"]
+            isOneToOne: false
+            referencedRelation: "pga_eixos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pga_programas_plano_anual_id_fkey"
+            columns: ["plano_anual_id"]
+            isOneToOne: false
+            referencedRelation: "plano_anual"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plano_anual: {
+        Row: {
+          ano: number
+          created_at: string
+          data_aprovacao: string | null
+          data_fim: string | null
+          data_inicio: string | null
+          descricao: string | null
+          id: string
+          nome: string
+          observacoes: string | null
+          responsavel_id: string | null
+          status: string
+          updated_at: string
+          versao: string
+        }
+        Insert: {
+          ano: number
+          created_at?: string
+          data_aprovacao?: string | null
+          data_fim?: string | null
+          data_inicio?: string | null
+          descricao?: string | null
+          id?: string
+          nome: string
+          observacoes?: string | null
+          responsavel_id?: string | null
+          status?: string
+          updated_at?: string
+          versao?: string
+        }
+        Update: {
+          ano?: number
+          created_at?: string
+          data_aprovacao?: string | null
+          data_fim?: string | null
+          data_inicio?: string | null
+          descricao?: string | null
+          id?: string
+          nome?: string
+          observacoes?: string | null
+          responsavel_id?: string | null
+          status?: string
+          updated_at?: string
+          versao?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           area_id: string | null
@@ -467,6 +669,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_active_user: { Args: { _user_id: string }; Returns: boolean }
       is_admin_or_diretoria: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
