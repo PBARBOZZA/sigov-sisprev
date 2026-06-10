@@ -198,6 +198,16 @@ function MinhasAcoes() {
   );
 }
 
+async function buscarAcoesApoiador(acaoIds: string[], select: string) {
+  const { data, error } = await supabase
+    .from("acoes")
+    .select(select)
+    .in("id", acaoIds)
+    .order("prazo_final", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as unknown as Omit<AcaoUsuario, "papel">[];
+}
+
 function combinarAcoes(
   responsavelData: Omit<AcaoUsuario, "papel">[],
   apoiadorData: Omit<AcaoUsuario, "papel">[],

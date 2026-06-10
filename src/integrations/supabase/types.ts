@@ -21,8 +21,8 @@ export type Database = {
           created_at: string
           data_inicio: string | null
           descricao: string | null
-          eixo_id: string | null
           eixo_estrategico: string | null
+          eixo_id: string | null
           id: string
           objetivo: string | null
           observacoes: string | null
@@ -46,8 +46,8 @@ export type Database = {
           created_at?: string
           data_inicio?: string | null
           descricao?: string | null
-          eixo_id?: string | null
           eixo_estrategico?: string | null
+          eixo_id?: string | null
           id?: string
           objetivo?: string | null
           observacoes?: string | null
@@ -71,8 +71,8 @@ export type Database = {
           created_at?: string
           data_inicio?: string | null
           descricao?: string | null
-          eixo_id?: string | null
           eixo_estrategico?: string | null
+          eixo_id?: string | null
           id?: string
           objetivo?: string | null
           observacoes?: string | null
@@ -117,6 +117,13 @@ export type Database = {
             columns: ["programa_id"]
             isOneToOne: false
             referencedRelation: "pga_programas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "acoes_responsavel_id_fkey"
+            columns: ["responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -662,6 +669,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_active_user: { Args: { _user_id: string }; Returns: boolean }
       is_admin_or_diretoria: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {

@@ -225,7 +225,7 @@ function PlanoAcao() {
 
   const createMutation = useMutation({
     mutationFn: async (form: CreateAcaoForm) => {
-      await createAcaoFn({ data: form });
+      await createAcaoFn({ data: form as any });
     },
     onSuccess: () => {
       toast.success("Ação criada com sucesso");
