@@ -2,9 +2,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { updateAcao } from "@/lib/acoes.functions";
+import { buscarMinhasAcoes } from "@/lib/minhas-acoes-data";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
@@ -24,9 +24,14 @@ function KanbanView() {
   const updateAcaoFn = useServerFn(updateAcao);
   const [dragId, setDragId] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["kanban-acoes"],
-    queryFn: async () => (await supabase.from("acoes").select("*, area:areas(nome), responsavel:profiles!acoes_responsavel_id_fkey(nome)").order("prazo_final")).data ?? [],
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["minhas-acoes", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const userId = user?.id;
+      if (!userId) return [];
+      return buscarMinhasAcoes(userId);
+    },
   });
 
   const moveMutation = useMutation({
@@ -34,7 +39,8 @@ function KanbanView() {
       await updateAcaoFn({ data: { id, status: status as any } });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["kanban-acoes"] });
+      qc.invalidateQueries({ queryKey: ["minhas-acoes", user?.id] });
+      qc.invalidateQueries({ queryKey: ["acoes-list"] });
       qc.invalidateQueries({ queryKey: ["dashboard-acoes"] });
       toast.success("Status atualizado");
     },
@@ -54,6 +60,11 @@ function KanbanView() {
         <h1 className="text-2xl font-bold">Kanban</h1>
         <p className="text-sm text-muted-foreground">Arraste os cartões entre colunas para alterar o status.</p>
       </div>
+      {isError && (
+        <Card className="p-4 text-sm text-destructive">
+          NÃ£o foi possÃ­vel carregar as aÃ§Ãµes do Kanban.
+        </Card>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {COLUMNS.map((col) => {
           const items = (data ?? []).filter((a) => a.status === col);
