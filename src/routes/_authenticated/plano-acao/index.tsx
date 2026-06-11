@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { createAcao } from "@/lib/acoes.functions";
+import { buscarAcoesPlanoAcao } from "@/lib/acoes-data";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -115,7 +116,7 @@ function PlanoAcao() {
     error: acoesError,
   } = useQuery({
     queryKey: ["acoes-list"],
-    queryFn: async () => {
+    queryFn: buscarAcoesPlanoAcao, /*
       const { data, error } = await supabase
         .from("acoes")
         .select("*")
@@ -125,7 +126,7 @@ function PlanoAcao() {
         throw error;
       }
       return data ?? [];
-    },
+    */
   });
 
   const { data: planos } = useQuery({

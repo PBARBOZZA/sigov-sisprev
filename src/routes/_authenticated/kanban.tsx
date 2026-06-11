@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { updateAcao } from "@/lib/acoes.functions";
-import { buscarMinhasAcoes } from "@/lib/minhas-acoes-data";
+import { buscarAcoesPlanoAcao, normalizarStatusAcao, STATUS_KANBAN } from "@/lib/acoes-data";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
@@ -16,7 +16,7 @@ export const Route = createFileRoute("/_authenticated/kanban")({
   component: KanbanView,
 });
 
-const COLUMNS = ["nao_iniciada", "em_andamento", "concluida", "atrasada", "cancelada"] as const;
+const COLUMNS = STATUS_KANBAN;
 
 function KanbanView() {
   const qc = useQueryClient();
@@ -25,13 +25,8 @@ function KanbanView() {
   const [dragId, setDragId] = useState<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["minhas-acoes", user?.id],
-    enabled: !!user?.id,
-    queryFn: async () => {
-      const userId = user?.id;
-      if (!userId) return [];
-      return buscarMinhasAcoes(userId);
-    },
+    queryKey: ["acoes-list"],
+    queryFn: buscarAcoesPlanoAcao,
   });
 
   const moveMutation = useMutation({
@@ -39,8 +34,8 @@ function KanbanView() {
       await updateAcaoFn({ data: { id, status: status as any } });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["minhas-acoes", user?.id] });
       qc.invalidateQueries({ queryKey: ["acoes-list"] });
+      qc.invalidateQueries({ queryKey: ["minhas-acoes", user?.id] });
       qc.invalidateQueries({ queryKey: ["dashboard-acoes"] });
       toast.success("Status atualizado");
     },
@@ -67,7 +62,7 @@ function KanbanView() {
       )}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {COLUMNS.map((col) => {
-          const items = (data ?? []).filter((a) => a.status === col);
+          const items = (data ?? []).filter((a) => normalizarStatusAcao(a.status) === col);
           return (
             <div key={col} className="min-h-[400px]"
               onDragOver={(e) => e.preventDefault()}
@@ -78,7 +73,8 @@ function KanbanView() {
               </div>
               <div className="space-y-2 bg-muted/30 p-2 rounded-md min-h-[300px]">
                 {items.map((a) => {
-                  const pz = prazoCor(a.prazo_final, a.status);
+                  const status = normalizarStatusAcao(a.status);
+                  const pz = prazoCor(a.prazo_final, status);
                   return (
                     <Card key={a.id} draggable={canManage || a.responsavel_id === user?.id}
                       onDragStart={() => { if (canManage || a.responsavel_id === user?.id) setDragId(a.id); }}
