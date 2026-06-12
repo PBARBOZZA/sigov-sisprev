@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const APP_ROLES = ["admin", "diretoria", "responsavel", "conselheiro"] as const;
+export const APP_ROLES = ["admin", "diretoria", "responsavel", "apoiador", "consulta", "conselheiro"] as const;
 export const ACAO_STATUS = [
   "nao_iniciada",
   "em_andamento",

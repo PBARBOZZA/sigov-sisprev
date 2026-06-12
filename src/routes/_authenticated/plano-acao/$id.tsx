@@ -49,7 +49,7 @@ export const Route = createFileRoute("/_authenticated/plano-acao/$id")({
 
 function AcaoDetalhes() {
   const { id } = Route.useParams();
-  const { user, isAdmin, canManage } = useAuth();
+  const { user, isAdmin, canManage, permissionLevel } = useAuth();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const updateAcaoFn = useServerFn(updateAcao);
@@ -179,7 +179,7 @@ function AcaoDetalhes() {
 
   const { data: apoiadoresResult } = useQuery({
     queryKey: ["acao-apoiadores", id],
-    enabled: canManage,
+    enabled: !!id,
     queryFn: async () => {
       const { data: vinculos, error } = await supabase
         .from("acoes_apoiadores")
@@ -361,11 +361,16 @@ function AcaoDetalhes() {
     );
 
   const pz = prazoCor(form.prazo_final, form.status);
-  const canEdit = canManage || acao.responsavel_id === user?.id;
   const evidencias = evidenciasResult?.items ?? [];
   const apoiadores = apoiadoresResult?.items ?? [];
   const usuariosVinculo = usuariosVinculoResult?.items ?? [];
   const apoiadorIds = new Set(apoiadores.map((apoiador) => apoiador.usuario_id));
+  const isResponsavel = acao.responsavel_id === user?.id;
+  const isApoiador = apoiadorIds.has(user?.id ?? "");
+  const canEditAction = canManage || (permissionLevel === "responsavel" && isResponsavel);
+  const canUpdateProgress = canEditAction || (permissionLevel === "apoiador" && isApoiador);
+  const canEditFullOperational = canEditAction;
+  const canUploadEvidence = canManage || isResponsavel || isApoiador;
   const usuariosDisponiveisApoio = usuariosVinculo.filter(
     (usuario) => usuario.id !== form.responsavel_id && !apoiadorIds.has(usuario.id),
   );
@@ -378,7 +383,7 @@ function AcaoDetalhes() {
   }
 
   function save() {
-    updateMutation.mutate({
+    const patch = canEditFullOperational ? {
       status: form.status,
       prioridade: form.prioridade,
       percentual_execucao: form.percentual_execucao,
@@ -387,7 +392,12 @@ function AcaoDetalhes() {
       descricao: form.descricao,
       objetivo: form.objetivo,
       observacoes: form.observacoes,
-    });
+    } : {
+      status: form.status,
+      percentual_execucao: form.percentual_execucao,
+      observacoes: form.observacoes,
+    };
+    updateMutation.mutate(patch);
   }
 
   return (
@@ -436,7 +446,7 @@ function AcaoDetalhes() {
             <p className="text-sm font-bold text-primary">{form.percentual_execucao}%</p>
           </div>
           <Progress value={form.percentual_execucao} />
-          {canEdit && (
+          {canUpdateProgress && (
             <Slider
               value={[form.percentual_execucao]}
               max={100}
@@ -452,7 +462,7 @@ function AcaoDetalhes() {
             <Select
               value={form.status}
               onValueChange={(v) => update({ status: v })}
-              disabled={!canEdit}
+              disabled={!canUpdateProgress}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -471,7 +481,7 @@ function AcaoDetalhes() {
             <Select
               value={form.prioridade}
               onValueChange={(v) => update({ prioridade: v })}
-              disabled={!canEdit}
+              disabled={!canEditFullOperational}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -491,7 +501,7 @@ function AcaoDetalhes() {
               type="date"
               value={form.data_inicio ?? ""}
               onChange={(e) => update({ data_inicio: e.target.value })}
-              disabled={!canEdit}
+              disabled={!canEditFullOperational}
             />
           </div>
           <div>
@@ -500,7 +510,7 @@ function AcaoDetalhes() {
               type="date"
               value={form.prazo_final ?? ""}
               onChange={(e) => update({ prazo_final: e.target.value })}
-              disabled={!canEdit}
+              disabled={!canEditFullOperational}
             />
           </div>
         </div>
@@ -512,7 +522,7 @@ function AcaoDetalhes() {
               value={form.descricao ?? ""}
               onChange={(e) => update({ descricao: e.target.value })}
               rows={3}
-              disabled={!canEdit}
+              disabled={!canEditFullOperational}
             />
           </div>
           <div>
@@ -521,7 +531,7 @@ function AcaoDetalhes() {
               value={form.objetivo ?? ""}
               onChange={(e) => update({ objetivo: e.target.value })}
               rows={2}
-              disabled={!canEdit}
+              disabled={!canEditFullOperational}
             />
           </div>
           <div>
@@ -530,12 +540,12 @@ function AcaoDetalhes() {
               value={form.observacoes ?? ""}
               onChange={(e) => update({ observacoes: e.target.value })}
               rows={3}
-              disabled={!canEdit}
+              disabled={!canUpdateProgress}
             />
           </div>
         </div>
 
-        {canEdit && (
+        {canUpdateProgress && (
           <div className="mt-4 flex justify-end">
             <Button onClick={save} disabled={updateMutation.isPending}>
               {updateMutation.isPending ? (
@@ -700,7 +710,7 @@ function AcaoDetalhes() {
               onChange={handleUpload}
               accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png"
             />
-            <Button size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
+            <Button size="sm" onClick={() => fileRef.current?.click()} disabled={uploading || !canUploadEvidence}>
               {uploading ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : (

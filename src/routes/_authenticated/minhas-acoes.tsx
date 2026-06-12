@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState, type ComponentType, type ReactNode } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { buscarMinhasAcoes } from "@/lib/minhas-acoes-data";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,26 +61,7 @@ function MinhasAcoes() {
     queryFn: async () => {
       const userId = user?.id;
       if (!userId) return [];
-
-      const select = "*, area:areas(nome), eixo:pga_eixos(nome), programa_ref:pga_programas(nome)";
-
-      const { data: responsavelData, error: responsavelError } = await supabase
-        .from("acoes")
-        .select(select)
-        .eq("responsavel_id", userId)
-        .order("prazo_final", { ascending: true });
-      if (responsavelError) throw responsavelError;
-
-      const { data: apoioData, error: apoioError } = await supabase
-        .from("acoes_apoiadores")
-        .select("acao_id")
-        .eq("usuario_id", userId);
-      if (apoioError) throw apoioError;
-
-      const apoioIds = Array.from(new Set((apoioData ?? []).map((item) => item.acao_id)));
-      const apoiadorData = apoioIds.length ? await buscarAcoesApoiador(apoioIds, select) : [];
-
-      return combinarAcoes((responsavelData ?? []) as Omit<AcaoUsuario, "papel">[], apoiadorData);
+      return buscarMinhasAcoes(userId);
     },
   });
 

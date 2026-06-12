@@ -27,10 +27,50 @@ function isManager(roles: string[]) {
   return roles.includes("admin") || roles.includes("diretoria");
 }
 
+function isConsulta(roles: string[]) {
+  return roles.includes("consulta") || roles.includes("conselheiro");
+}
+
 async function assertManager(supabase: any, userId: string, email?: string | null) {
   const roles = await getRoles(supabase, userId, email);
   if (!isManager(roles)) {
     throw new Error("Apenas administradores ou gestores podem alterar vinculos da acao.");
+  }
+}
+
+async function isApoiadorDaAcao(supabase: any, userId: string, acaoId: string) {
+  const { data, error } = await supabase
+    .from("acoes_apoiadores")
+    .select("id")
+    .eq("acao_id", acaoId)
+    .eq("usuario_id", userId)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error("Falha ao validar apoiador da acao.");
+  return Boolean(data);
+}
+
+function assertOnlyAllowedFields(patch: Record<string, unknown>, allowed: string[], message: string) {
+  const allowedSet = new Set(allowed);
+  const blocked = Object.keys(patch).filter((key) => !allowedSet.has(key));
+  if (blocked.length > 0) throw new Error(message);
+}
+
+async function assertCompletionEvidenceOrJustification(
+  supabase: any,
+  acaoId: string,
+  currentObservacoes: string | null,
+  nextObservacoes: string | null | undefined,
+) {
+  const { count, error } = await supabase
+    .from("evidencias")
+    .select("id", { count: "exact", head: true })
+    .eq("acao_id", acaoId);
+  if (error) throw new Error("Falha ao verificar evidencias da acao.");
+
+  const justification = (nextObservacoes ?? currentObservacoes ?? "").trim();
+  if ((count ?? 0) === 0 && !justification) {
+    throw new Error("Para concluir sem evidencia, informe uma justificativa em Observacoes.");
   }
 }
 
@@ -77,8 +117,9 @@ async function assertEvidencePermission(
     .maybeSingle();
 
   if (error || !acao) throw new Error("Acao nao encontrada.");
-  if (!isManager(roles) && acao.responsavel_id !== userId) {
-    throw new Error("Apenas responsaveis, diretoria ou administradores podem anexar evidencias.");
+  const isApoiador = await isApoiadorDaAcao(supabase, userId, acaoId);
+  if (isConsulta(roles) || (!isManager(roles) && acao.responsavel_id !== userId && !isApoiador)) {
+    throw new Error("Seu perfil nao permite anexar evidencias nesta acao.");
   }
 }
 
@@ -93,6 +134,8 @@ export const createAcao = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(createAcaoSchema)
   .handler(async ({ data, context }) => {
+    await assertManager(context.supabase, context.userId, (context.claims as any)?.email);
+
     const { data: created, error } = await context.supabase
       .from("acoes")
       .insert(toAcaoInsert(data))
@@ -108,13 +151,24 @@ export const updateAcao = createServerFn({ method: "POST" })
   .inputValidator(updateAcaoSchema)
   .handler(async ({ data, context }) => {
     const { id, ...patchData } = data;
+    const roles = await getRoles(context.supabase, context.userId, (context.claims as any)?.email);
 
     const { data: current, error: currentError } = await context.supabase
       .from("acoes")
-      .select("data_inicio,prazo_final")
+      .select("id,responsavel_id,data_inicio,prazo_final,observacoes,status")
       .eq("id", id)
       .single();
     if (currentError || !current) throw new Error("Acao nao encontrada.");
+
+    const isResponsavel = current.responsavel_id === context.userId;
+    const isApoiador = await isApoiadorDaAcao(context.supabase, context.userId, id);
+    const manager = isManager(roles);
+
+    if (isConsulta(roles)) throw new Error("Perfil de consulta nao pode alterar acoes.");
+
+    if (!manager && !isResponsavel && !isApoiador) {
+      throw new Error("Voce nao participa desta acao e nao pode altera-la.");
+    }
 
     const nextInicio = patchData.data_inicio ?? current.data_inicio;
     const nextPrazo = patchData.prazo_final ?? current.prazo_final;
@@ -128,6 +182,41 @@ export const updateAcao = createServerFn({ method: "POST" })
         delete (patch as Record<string, unknown>)[key];
       }
     });
+
+    if (!manager && isResponsavel) {
+      assertOnlyAllowedFields(
+        patch,
+        [
+          "status",
+          "prioridade",
+          "percentual_execucao",
+          "data_inicio",
+          "prazo_final",
+          "descricao",
+          "objetivo",
+          "observacoes",
+          "periodicidade",
+        ],
+        "Responsaveis nao podem alterar responsavel, area ou vinculos estrategicos da acao.",
+      );
+    }
+
+    if (!manager && !isResponsavel && isApoiador) {
+      assertOnlyAllowedFields(
+        patch,
+        ["status", "percentual_execucao", "observacoes"],
+        "Apoiadores podem alterar apenas status, percentual e observacoes.",
+      );
+    }
+
+    if (patch.status === "concluida" && current.status !== "concluida") {
+      await assertCompletionEvidenceOrJustification(
+        context.supabase,
+        id,
+        current.observacoes,
+        typeof patch.observacoes === "string" ? patch.observacoes : undefined,
+      );
+    }
 
     const { error } = await context.supabase.from("acoes").update(patch).eq("id", id);
     if (error) throw new Error(error.message);

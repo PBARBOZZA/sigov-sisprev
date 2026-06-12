@@ -1,4 +1,3 @@
-import { RequireRole } from "@/components/require-role";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,7 +9,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/relatorios")({
   head: () => ({ meta: [{ title: "Relatórios — SIGOV-SISPREV" }] }),
-  component: () => (<RequireRole require="manage"><Relatorios /></RequireRole>),
+  component: Relatorios,
 });
 
 function Relatorios() {
