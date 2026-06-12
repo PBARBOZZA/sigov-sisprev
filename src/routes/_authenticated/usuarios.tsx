@@ -25,10 +25,12 @@ export const Route = createFileRoute("/_authenticated/usuarios")({
   component: () => (<RequireRole require="admin"><Usuarios /></RequireRole>),
 });
 
-const ROLES: { value: "admin" | "diretoria" | "responsavel" | "conselheiro"; label: string }[] = [
+const ROLES: { value: "admin" | "diretoria" | "responsavel" | "apoiador" | "consulta" | "conselheiro"; label: string }[] = [
   { value: "admin", label: "Administrador" },
   { value: "diretoria", label: "Diretoria" },
   { value: "responsavel", label: "Responsável por Ação" },
+  { value: "apoiador", label: "Apoiador" },
+  { value: "consulta", label: "Consulta" },
   { value: "conselheiro", label: "Conselheiro / Consulta" },
 ];
 

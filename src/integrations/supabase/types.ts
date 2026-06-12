@@ -680,7 +680,7 @@ export type Database = {
         | "concluida"
         | "atrasada"
         | "cancelada"
-      app_role: "admin" | "diretoria" | "responsavel" | "conselheiro"
+      app_role: "admin" | "diretoria" | "responsavel" | "apoiador" | "consulta" | "conselheiro"
       progestao_situacao:
         | "atendido"
         | "parcial"
@@ -821,7 +821,7 @@ export const Constants = {
         "atrasada",
         "cancelada",
       ],
-      app_role: ["admin", "diretoria", "responsavel", "conselheiro"],
+      app_role: ["admin", "diretoria", "responsavel", "apoiador", "consulta", "conselheiro"],
       progestao_situacao: [
         "atendido",
         "parcial",

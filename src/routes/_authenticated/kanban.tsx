@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { updateAcao } from "@/lib/acoes.functions";
 import { buscarAcoesPlanoAcao, normalizarStatusAcao, STATUS_KANBAN } from "@/lib/acoes-data";
+import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
@@ -20,13 +21,19 @@ const COLUMNS = STATUS_KANBAN;
 
 function KanbanView() {
   const qc = useQueryClient();
-  const { user, canManage } = useAuth();
+  const { user, canManage, permissionLevel } = useAuth();
   const updateAcaoFn = useServerFn(updateAcao);
   const [dragId, setDragId] = useState<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["acoes-list"],
     queryFn: buscarAcoesPlanoAcao,
+  });
+
+  const { data: apoiadores } = useQuery({
+    queryKey: ["acoes-apoiadores-list"],
+    queryFn: async () =>
+      (await supabase.from("acoes_apoiadores").select("acao_id,usuario_id")).data ?? [],
   });
 
   const moveMutation = useMutation({
@@ -47,6 +54,18 @@ function KanbanView() {
   function onDrop(col: string) {
     if (dragId) moveMutation.mutate({ id: dragId, status: col });
     setDragId(null);
+  }
+
+  function canMoveCard(acao: { id: string; responsavel_id: string | null }) {
+    if (canManage) return true;
+    if (permissionLevel === "consulta") return false;
+    if (permissionLevel === "responsavel") return acao.responsavel_id === user?.id;
+    if (permissionLevel === "apoiador") {
+      return (apoiadores ?? []).some(
+        (apoiador) => apoiador.acao_id === acao.id && apoiador.usuario_id === user?.id,
+      );
+    }
+    return false;
   }
 
   return (
@@ -75,10 +94,11 @@ function KanbanView() {
                 {items.map((a) => {
                   const status = normalizarStatusAcao(a.status);
                   const pz = prazoCor(a.prazo_final, status);
+                  const canMove = canMoveCard(a);
                   return (
-                    <Card key={a.id} draggable={canManage || a.responsavel_id === user?.id}
-                      onDragStart={() => { if (canManage || a.responsavel_id === user?.id) setDragId(a.id); }}
-                      className="p-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow">
+                    <Card key={a.id} draggable={canMove}
+                      onDragStart={() => { if (canMove) setDragId(a.id); }}
+                      className={`p-3 hover:shadow-md transition-shadow ${canMove ? "cursor-grab active:cursor-grabbing" : ""}`}>
                       <Link to="/plano-acao/$id" params={{ id: a.id }} className="block">
                         <p className="text-[10px] font-mono text-muted-foreground">{a.codigo}</p>
                         <p className="text-sm font-medium line-clamp-2">{a.titulo}</p>

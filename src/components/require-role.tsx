@@ -13,7 +13,7 @@ export function RequireRole({ require, children }: Props) {
   if (loading) return null;
   const allowed = require === "admin"
     ? permissionLevel === "admin"
-    : permissionLevel === "admin" || permissionLevel === "manage";
+    : permissionLevel === "admin" || permissionLevel === "diretoria";
   if (!allowed) {
     return (
       <div className="flex items-center justify-center p-8">

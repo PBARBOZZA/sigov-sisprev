@@ -1,7 +1,13 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { getPermissionLevel, isBootstrapAdminEmail, type AppRole, type PermissionLevel } from "@/lib/permissions";
+import {
+  canManageActions,
+  getPermissionLevel,
+  isBootstrapAdminEmail,
+  type AppRole,
+  type PermissionLevel,
+} from "@/lib/permissions";
 
 export type { AppRole } from "@/lib/permissions";
 
@@ -84,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         roles,
         isAdmin,
         isDiretoria,
-        canManage: permissionLevel === "admin" || permissionLevel === "manage",
+        canManage: canManageActions(permissionLevel),
         permissionLevel,
         signOut: async () => { await supabase.auth.signOut(); },
       }}
