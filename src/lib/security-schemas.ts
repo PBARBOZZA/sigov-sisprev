@@ -1,6 +1,13 @@
 import { z } from "zod";
 
-export const APP_ROLES = ["admin", "diretoria", "responsavel", "apoiador", "consulta", "conselheiro"] as const;
+export const APP_ROLES = [
+  "admin",
+  "diretoria",
+  "responsavel",
+  "apoiador",
+  "consulta",
+  "conselheiro",
+] as const;
 export const ACAO_STATUS = [
   "nao_iniciada",
   "em_andamento",
@@ -140,17 +147,12 @@ export const evidenciaUploadSchema = z.object({
 
 export const evidenciaRegistroSchema = z.object({
   acao_id: z.string().uuid(),
-  nome_evidencia: requiredText("Nome da evidencia", 1, 180),
-  tipo_evidencia: optionalText(80),
-  link_externo: optionalText(500),
-  caminho_pasta: optionalText(500),
-  numero_processo: optionalText(120),
-  data_evidencia: optionalDate,
-  observacao: optionalText(1000),
-  status: z.enum(EVIDENCIA_STATUS).default("pendente"),
-  nome_arquivo: optionalText(180),
+  nome_arquivo: requiredText("Nome da evidencia", 1, 180),
   tipo_arquivo: optionalText(120),
-  caminho_arquivo: optionalText(260),
+  caminho_arquivo: requiredText("Caminho da pasta/rede", 1, 500),
+  link_externo: optionalText(500),
+  numero_processo: optionalText(120),
+  observacao: optionalText(1000),
 });
 
 export const vincularResponsavelAcaoSchema = z.object({

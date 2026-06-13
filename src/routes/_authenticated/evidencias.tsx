@@ -1,23 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import {
-  EVIDENCE_BUCKET,
-  EVIDENCE_STORAGE_NOT_CONFIGURED_MESSAGE,
-  checkEvidenceStorageConfigured,
-  prepareEvidenceUpload,
-  registerEvidenceRecord,
-} from "@/lib/acoes.functions";
-import type { EvidenciaRegistroInput, EvidenciaUploadInput } from "@/lib/security-schemas";
+import { registerEvidenceRecord } from "@/lib/acoes.functions";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -33,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, FileText, Download, ExternalLink, FolderOpen, Plus } from "lucide-react";
+import { Loader2, FileText, FolderOpen, Plus } from "lucide-react";
 import { fmtDate } from "@/lib/acao-helpers";
 import { toast } from "sonner";
 
@@ -42,23 +34,12 @@ export const Route = createFileRoute("/_authenticated/evidencias")({
   component: Evidencias,
 });
 
-const STATUS_OPTIONS = [
-  { value: "pendente", label: "Pendente" },
-  { value: "enviada", label: "Enviada" },
-  { value: "validada", label: "Validada" },
-  { value: "rejeitada", label: "Rejeitada" },
-];
-
 function Evidencias() {
   const { permissionLevel } = useAuth();
   const qc = useQueryClient();
-  const checkEvidenceStorageFn = useServerFn(checkEvidenceStorageConfigured);
-  const prepareEvidenceFn = useServerFn(prepareEvidenceUpload);
   const registerEvidenceFn = useServerFn(registerEvidenceRecord);
-  const fileRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [acaoId, setAcaoId] = useState("");
-  const [status, setStatus] = useState<EvidenciaRegistroInput["status"]>("pendente");
   const canRegister = permissionLevel !== "consulta";
 
   const { data, isLoading } = useQuery({
@@ -80,86 +61,34 @@ function Evidencias() {
 
   const createMutation = useMutation({
     mutationFn: async (form: FormData) => {
-      const file = fileRef.current?.files?.[0] ?? null;
-      let storageSkipped = false;
       const get = (key: string) => form.get(key)?.toString().trim() || null;
       const selectedAcaoId = get("acao_id");
-      const nomeEvidencia = get("nome_evidencia");
-      if (!selectedAcaoId || !nomeEvidencia) {
+      const nomeArquivo = get("nome_arquivo");
+      if (!selectedAcaoId || !nomeArquivo) {
         throw new Error("Informe a acao vinculada e o nome da evidencia.");
       }
 
-      const payload: EvidenciaRegistroInput = {
-        acao_id: selectedAcaoId,
-        nome_evidencia: nomeEvidencia,
-        tipo_evidencia: get("tipo_evidencia"),
-        link_externo: get("link_externo"),
-        caminho_pasta: get("caminho_pasta"),
-        numero_processo: get("numero_processo"),
-        data_evidencia: get("data_evidencia"),
-        observacao: get("observacao"),
-        status,
-        caminho_arquivo: null,
-        nome_arquivo: null,
-        tipo_arquivo: null,
-      };
-
-      if (file) {
-        const storage = await checkEvidenceStorageFn();
-        if (!storage.configured) {
-          storageSkipped = true;
-        } else {
-          const metadata: EvidenciaUploadInput = {
-            acao_id: selectedAcaoId,
-            nome_arquivo: file.name,
-            tipo_arquivo: file.type as EvidenciaUploadInput["tipo_arquivo"],
-            tamanho: file.size,
-            observacao: get("observacao"),
-          };
-          const prepared = await prepareEvidenceFn({ data: metadata });
-          const { error: uploadError } = await supabase.storage
-            .from(EVIDENCE_BUCKET)
-            .upload(prepared.path, file);
-          if (uploadError) throw uploadError;
-          payload.caminho_arquivo = prepared.path;
-          payload.nome_arquivo = file.name;
-          payload.tipo_arquivo = file.type;
-          payload.status = status === "pendente" ? "enviada" : status;
-        }
-      }
-
-      await registerEvidenceFn({ data: payload });
-      return { storageSkipped };
+      await registerEvidenceFn({
+        data: {
+          acao_id: selectedAcaoId,
+          nome_arquivo: nomeArquivo,
+          tipo_arquivo: get("tipo_arquivo"),
+          caminho_arquivo: get("caminho_arquivo"),
+          link_externo: get("link_externo"),
+          numero_processo: get("numero_processo"),
+          observacao: get("observacao"),
+        },
+      });
     },
-    onSuccess: ({ storageSkipped }) => {
-      if (storageSkipped) {
-        toast.warning(EVIDENCE_STORAGE_NOT_CONFIGURED_MESSAGE);
-        toast.success("Evidencia cadastrada sem arquivo");
-      } else {
-        toast.success("Evidencia cadastrada");
-      }
+    onSuccess: () => {
+      toast.success("Evidencia cadastrada");
       qc.invalidateQueries({ queryKey: ["evidencias-all"] });
       setOpen(false);
       setAcaoId("");
-      setStatus("pendente");
-      if (fileRef.current) fileRef.current.value = "";
     },
     onError: (error: unknown) =>
       toast.error(error instanceof Error ? error.message : "Erro ao cadastrar evidencia"),
   });
-
-  async function download(path: string | null, nome: string) {
-    if (!path) return;
-    const { data, error } = await supabase.storage.from(EVIDENCE_BUCKET).createSignedUrl(path, 60);
-    if (error || !data) {
-      toast.error("Erro ao gerar link");
-      return;
-    }
-    const a = document.createElement("a");
-    a.href = data.signedUrl;
-    a.download = nome;
-    a.click();
-  }
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -205,10 +134,10 @@ function Evidencias() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <Field label="Nome da evidencia *" name="nome_evidencia" required />
+                  <Field label="Nome da evidencia *" name="nome_arquivo" required />
                   <Field
                     label="Tipo da evidencia"
-                    name="tipo_evidencia"
+                    name="tipo_arquivo"
                     placeholder="PDF, Ata, Oficio, Processo"
                   />
                   <Field
@@ -219,36 +148,11 @@ function Evidencias() {
                   />
                   <Field
                     label="Caminho da pasta/rede"
-                    name="caminho_pasta"
+                    name="caminho_arquivo"
                     placeholder="\\servidor\\sisprev\\progestao\\2026\\seguranca\\psi_aprovada.pdf"
+                    required
                   />
                   <Field label="Numero do processo/documento" name="numero_processo" />
-                  <Field label="Data da evidencia" name="data_evidencia" type="date" />
-                  <div className="space-y-1">
-                    <Label>Status</Label>
-                    <input type="hidden" name="status" value={status} />
-                    <Select
-                      value={status}
-                      onValueChange={(value) =>
-                        setStatus(value as EvidenciaRegistroInput["status"])
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {STATUS_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Upload opcional</Label>
-                    <Input ref={fileRef} type="file" accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png" />
-                  </div>
                   <div className="space-y-1 md:col-span-2">
                     <Label>Observacoes</Label>
                     <Textarea name="observacao" rows={3} />
@@ -286,9 +190,6 @@ function Evidencias() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium truncate">{e.nome_arquivo}</p>
-                      <Badge variant="outline" className="text-[10px]">
-                        {statusLabel(e.status)}
-                      </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {e.acao ? (
@@ -304,42 +205,22 @@ function Evidencias() {
                       )}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {e.tipo_evidencia ?? e.tipo_arquivo ?? "Sem tipo"} - {e.usuario?.nome ?? "-"}{" "}
-                      - {fmtDate(e.data_evidencia ?? e.created_at)}
+                      {e.tipo_arquivo ?? "Sem tipo"} - {e.usuario?.nome ?? "-"} -{" "}
+                      {fmtDate(e.created_at)}
                     </p>
-                    {(e.numero_processo || e.caminho_pasta || e.link_externo) && (
-                      <p className="text-xs text-muted-foreground truncate">
-                        {[e.numero_processo, e.caminho_pasta, e.link_externo]
-                          .filter(Boolean)
-                          .join(" - ")}
-                      </p>
+                    {e.observacao && (
+                      <p className="text-xs text-muted-foreground truncate">{e.observacao}</p>
                     )}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  {e.link_externo && (
-                    <Button variant="ghost" size="icon" asChild>
-                      <a href={e.link_externo} target="_blank" rel="noreferrer">
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                    </Button>
-                  )}
-                  {e.caminho_pasta && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => navigator.clipboard?.writeText(e.caminho_pasta)}
-                    >
-                      <FolderOpen className="h-4 w-4" />
-                    </Button>
-                  )}
                   {e.caminho_arquivo && (
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => download(e.caminho_arquivo, e.nome_arquivo)}
+                      onClick={() => navigator.clipboard?.writeText(e.caminho_arquivo)}
                     >
-                      <Download className="h-4 w-4" />
+                      <FolderOpen className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
@@ -360,8 +241,4 @@ function Field(props: React.InputHTMLAttributes<HTMLInputElement> & { label: str
       <Input id={rest.name} {...rest} />
     </div>
   );
-}
-
-function statusLabel(status: string | null | undefined) {
-  return STATUS_OPTIONS.find((option) => option.value === status)?.label ?? "Pendente";
 }

@@ -181,53 +181,32 @@ export type Database = {
       evidencias: {
         Row: {
           acao_id: string;
-          caminho_arquivo: string | null;
-          caminho_pasta: string | null;
+          caminho_arquivo: string;
           created_at: string;
-          data_evidencia: string | null;
           id: string;
-          link_externo: string | null;
           nome_arquivo: string;
-          numero_processo: string | null;
           observacao: string | null;
-          observacoes: string | null;
-          status: string;
           tipo_arquivo: string | null;
-          tipo_evidencia: string | null;
           usuario_id: string;
         };
         Insert: {
           acao_id: string;
-          caminho_arquivo?: string | null;
-          caminho_pasta?: string | null;
+          caminho_arquivo: string;
           created_at?: string;
-          data_evidencia?: string | null;
           id?: string;
-          link_externo?: string | null;
           nome_arquivo: string;
-          numero_processo?: string | null;
           observacao?: string | null;
-          observacoes?: string | null;
-          status?: string;
           tipo_arquivo?: string | null;
-          tipo_evidencia?: string | null;
           usuario_id: string;
         };
         Update: {
           acao_id?: string;
-          caminho_arquivo?: string | null;
-          caminho_pasta?: string | null;
+          caminho_arquivo?: string;
           created_at?: string;
-          data_evidencia?: string | null;
           id?: string;
-          link_externo?: string | null;
           nome_arquivo?: string;
-          numero_processo?: string | null;
           observacao?: string | null;
-          observacoes?: string | null;
-          status?: string;
           tipo_arquivo?: string | null;
-          tipo_evidencia?: string | null;
           usuario_id?: string;
         };
         Relationships: [
