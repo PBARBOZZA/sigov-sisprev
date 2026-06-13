@@ -1,22 +1,15 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import {
-  EVIDENCE_BUCKET,
-  EVIDENCE_STORAGE_NOT_CONFIGURED_MESSAGE,
   adicionarApoiadorAcao,
-  checkEvidenceStorageConfigured,
-  prepareEvidenceUpload,
-  registerEvidenceRecord,
-  registerEvidenceUpload,
   removerApoiadorAcao,
   updateAcao,
   vincularResponsavelAcao,
 } from "@/lib/acoes.functions";
-import type { EvidenciaUploadInput } from "@/lib/security-schemas";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,10 +30,7 @@ import {
   ArrowLeft,
   Save,
   Trash2,
-  Upload,
   FileText,
-  Download,
-  ExternalLink,
   FolderOpen,
   UserMinus,
   UserPlus,
@@ -63,12 +53,6 @@ function AcaoDetalhes() {
   const vincularResponsavelFn = useServerFn(vincularResponsavelAcao);
   const adicionarApoiadorFn = useServerFn(adicionarApoiadorAcao);
   const removerApoiadorFn = useServerFn(removerApoiadorAcao);
-  const checkEvidenceStorageFn = useServerFn(checkEvidenceStorageConfigured);
-  const prepareEvidenceFn = useServerFn(prepareEvidenceUpload);
-  const registerEvidenceFn = useServerFn(registerEvidenceUpload);
-  const registerEvidenceRecordFn = useServerFn(registerEvidenceRecord);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
   const [responsavelSelecionado, setResponsavelSelecionado] = useState("");
   const [apoiadorSelecionado, setApoiadorSelecionado] = useState("");
 
@@ -301,69 +285,6 @@ function AcaoDetalhes() {
     onError: (e: any) => toast.error(e.message),
   });
 
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
-
-    setUploading(true);
-    try {
-      const metadata: EvidenciaUploadInput = {
-        acao_id: id,
-        nome_arquivo: file.name,
-        tipo_arquivo: file.type as EvidenciaUploadInput["tipo_arquivo"],
-        tamanho: file.size,
-        observacao: null,
-      };
-
-      const storage = await checkEvidenceStorageFn();
-      if (!storage.configured) {
-        await registerEvidenceRecordFn({
-          data: {
-            acao_id: id,
-            nome_evidencia: file.name,
-            tipo_evidencia: file.type || null,
-            observacao: null,
-            status: "pendente",
-          },
-        });
-
-        toast.warning(EVIDENCE_STORAGE_NOT_CONFIGURED_MESSAGE);
-        toast.success("Evidencia cadastrada sem arquivo");
-        qc.invalidateQueries({ queryKey: ["evidencias", id] });
-        if (fileRef.current) fileRef.current.value = "";
-        return;
-      }
-
-      const prepared = await prepareEvidenceFn({ data: metadata });
-      const { error: uploadError } = await supabase.storage
-        .from(EVIDENCE_BUCKET)
-        .upload(prepared.path, file);
-      if (uploadError) throw uploadError;
-
-      await registerEvidenceFn({ data: { ...metadata, caminho_arquivo: prepared.path } });
-
-      toast.success("Evidencia enviada");
-      qc.invalidateQueries({ queryKey: ["evidencias", id] });
-      if (fileRef.current) fileRef.current.value = "";
-    } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Erro ao enviar evidencia");
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  async function downloadEvidencia(path: string, nome: string) {
-    const { data, error } = await supabase.storage.from(EVIDENCE_BUCKET).createSignedUrl(path, 60);
-    if (error || !data) {
-      toast.error("Erro ao gerar link");
-      return;
-    }
-    const a = document.createElement("a");
-    a.href = data.signedUrl;
-    a.download = nome;
-    a.click();
-  }
-
   if (isLoading)
     return (
       <div className="flex justify-center p-12">
@@ -411,20 +332,22 @@ function AcaoDetalhes() {
   }
 
   function save() {
-    const patch = canEditFullOperational ? {
-      status: form.status,
-      prioridade: form.prioridade,
-      percentual_execucao: form.percentual_execucao,
-      data_inicio: form.data_inicio,
-      prazo_final: form.prazo_final,
-      descricao: form.descricao,
-      objetivo: form.objetivo,
-      observacoes: form.observacoes,
-    } : {
-      status: form.status,
-      percentual_execucao: form.percentual_execucao,
-      observacoes: form.observacoes,
-    };
+    const patch = canEditFullOperational
+      ? {
+          status: form.status,
+          prioridade: form.prioridade,
+          percentual_execucao: form.percentual_execucao,
+          data_inicio: form.data_inicio,
+          prazo_final: form.prazo_final,
+          descricao: form.descricao,
+          objetivo: form.objetivo,
+          observacoes: form.observacoes,
+        }
+      : {
+          status: form.status,
+          percentual_execucao: form.percentual_execucao,
+          observacoes: form.observacoes,
+        };
     updateMutation.mutate(patch);
   }
 
@@ -731,20 +654,8 @@ function AcaoDetalhes() {
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold">Evidencias</h3>
           <div>
-            <input
-              ref={fileRef}
-              type="file"
-              hidden
-              onChange={handleUpload}
-              accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png"
-            />
-            <Button size="sm" onClick={() => fileRef.current?.click()} disabled={uploading || !canUploadEvidence}>
-              {uploading ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Upload className="h-4 w-4 mr-2" />
-              )}
-              Anexar evidencia
+            <Button size="sm" asChild disabled={!canUploadEvidence}>
+              <Link to="/evidencias">Registrar evidencia</Link>
             </Button>
           </div>
         </div>
@@ -766,47 +677,24 @@ function AcaoDetalhes() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-medium truncate">{e.nome_arquivo}</p>
-                      <Badge variant="outline" className="text-[10px]">
-                        {statusEvidenciaLabel(e.status)}
-                      </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {e.tipo_evidencia ?? e.tipo_arquivo ?? "Sem tipo"} - {e.usuario?.nome ?? "-"}{" "}
-                      - {fmtDate(e.data_evidencia ?? e.created_at)}
+                      {e.tipo_arquivo ?? "Sem tipo"} - {e.usuario?.nome ?? "-"} -{" "}
+                      {fmtDate(e.created_at)}
                     </p>
-                    {(e.numero_processo || e.caminho_pasta || e.link_externo) && (
-                      <p className="text-xs text-muted-foreground truncate">
-                        {[e.numero_processo, e.caminho_pasta, e.link_externo]
-                          .filter(Boolean)
-                          .join(" - ")}
-                      </p>
+                    {e.observacao && (
+                      <p className="text-xs text-muted-foreground truncate">{e.observacao}</p>
                     )}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  {e.link_externo && (
-                    <Button variant="ghost" size="icon" asChild>
-                      <a href={e.link_externo} target="_blank" rel="noreferrer">
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                    </Button>
-                  )}
-                  {e.caminho_pasta && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => navigator.clipboard?.writeText(e.caminho_pasta)}
-                    >
-                      <FolderOpen className="h-4 w-4" />
-                    </Button>
-                  )}
                   {e.caminho_arquivo && (
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => downloadEvidencia(e.caminho_arquivo, e.nome_arquivo)}
+                      onClick={() => navigator.clipboard?.writeText(e.caminho_arquivo)}
                     >
-                      <Download className="h-4 w-4" />
+                      <FolderOpen className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
@@ -817,16 +705,6 @@ function AcaoDetalhes() {
       </Card>
     </div>
   );
-}
-
-function statusEvidenciaLabel(status: string | null | undefined) {
-  const labels: Record<string, string> = {
-    pendente: "Pendente",
-    enviada: "Enviada",
-    validada: "Validada",
-    rejeitada: "Rejeitada",
-  };
-  return labels[status ?? ""] ?? "Pendente";
 }
 
 function Info({ label, value }: { label: string; value: string }) {
