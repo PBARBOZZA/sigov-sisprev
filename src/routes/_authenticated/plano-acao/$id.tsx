@@ -5,13 +5,18 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import {
+  EVIDENCE_BUCKET,
+  EVIDENCE_STORAGE_NOT_CONFIGURED_MESSAGE,
   adicionarApoiadorAcao,
+  checkEvidenceStorageConfigured,
   prepareEvidenceUpload,
+  registerEvidenceRecord,
   registerEvidenceUpload,
   removerApoiadorAcao,
   updateAcao,
   vincularResponsavelAcao,
 } from "@/lib/acoes.functions";
+import type { EvidenciaUploadInput } from "@/lib/security-schemas";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +40,8 @@ import {
   Upload,
   FileText,
   Download,
+  ExternalLink,
+  FolderOpen,
   UserMinus,
   UserPlus,
   Users,
@@ -56,8 +63,10 @@ function AcaoDetalhes() {
   const vincularResponsavelFn = useServerFn(vincularResponsavelAcao);
   const adicionarApoiadorFn = useServerFn(adicionarApoiadorAcao);
   const removerApoiadorFn = useServerFn(removerApoiadorAcao);
+  const checkEvidenceStorageFn = useServerFn(checkEvidenceStorageConfigured);
   const prepareEvidenceFn = useServerFn(prepareEvidenceUpload);
   const registerEvidenceFn = useServerFn(registerEvidenceUpload);
+  const registerEvidenceRecordFn = useServerFn(registerEvidenceRecord);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [responsavelSelecionado, setResponsavelSelecionado] = useState("");
@@ -298,17 +307,36 @@ function AcaoDetalhes() {
 
     setUploading(true);
     try {
-      const metadata = {
+      const metadata: EvidenciaUploadInput = {
         acao_id: id,
         nome_arquivo: file.name,
-        tipo_arquivo: file.type as any,
+        tipo_arquivo: file.type as EvidenciaUploadInput["tipo_arquivo"],
         tamanho: file.size,
         observacao: null,
       };
 
+      const storage = await checkEvidenceStorageFn();
+      if (!storage.configured) {
+        await registerEvidenceRecordFn({
+          data: {
+            acao_id: id,
+            nome_evidencia: file.name,
+            tipo_evidencia: file.type || null,
+            observacao: null,
+            status: "pendente",
+          },
+        });
+
+        toast.warning(EVIDENCE_STORAGE_NOT_CONFIGURED_MESSAGE);
+        toast.success("Evidencia cadastrada sem arquivo");
+        qc.invalidateQueries({ queryKey: ["evidencias", id] });
+        if (fileRef.current) fileRef.current.value = "";
+        return;
+      }
+
       const prepared = await prepareEvidenceFn({ data: metadata });
       const { error: uploadError } = await supabase.storage
-        .from("evidencias")
+        .from(EVIDENCE_BUCKET)
         .upload(prepared.path, file);
       if (uploadError) throw uploadError;
 
@@ -317,15 +345,15 @@ function AcaoDetalhes() {
       toast.success("Evidencia enviada");
       qc.invalidateQueries({ queryKey: ["evidencias", id] });
       if (fileRef.current) fileRef.current.value = "";
-    } catch (error: any) {
-      toast.error(error?.message ?? "Erro ao enviar evidencia");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Erro ao enviar evidencia");
     } finally {
       setUploading(false);
     }
   }
 
   async function downloadEvidencia(path: string, nome: string) {
-    const { data, error } = await supabase.storage.from("evidencias").createSignedUrl(path, 60);
+    const { data, error } = await supabase.storage.from(EVIDENCE_BUCKET).createSignedUrl(path, 60);
     if (error || !data) {
       toast.error("Erro ao gerar link");
       return;
@@ -736,19 +764,52 @@ function AcaoDetalhes() {
                 <div className="flex items-center gap-3 min-w-0">
                   <FileText className="h-4 w-4 text-primary shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{e.nome_arquivo}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium truncate">{e.nome_arquivo}</p>
+                      <Badge variant="outline" className="text-[10px]">
+                        {statusEvidenciaLabel(e.status)}
+                      </Badge>
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                      {e.usuario?.nome ?? "-"} - {fmtDate(e.created_at)}
+                      {e.tipo_evidencia ?? e.tipo_arquivo ?? "Sem tipo"} - {e.usuario?.nome ?? "-"}{" "}
+                      - {fmtDate(e.data_evidencia ?? e.created_at)}
                     </p>
+                    {(e.numero_processo || e.caminho_pasta || e.link_externo) && (
+                      <p className="text-xs text-muted-foreground truncate">
+                        {[e.numero_processo, e.caminho_pasta, e.link_externo]
+                          .filter(Boolean)
+                          .join(" - ")}
+                      </p>
+                    )}
                   </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => downloadEvidencia(e.caminho_arquivo, e.nome_arquivo)}
-                >
-                  <Download className="h-4 w-4" />
-                </Button>
+                <div className="flex shrink-0 items-center gap-1">
+                  {e.link_externo && (
+                    <Button variant="ghost" size="icon" asChild>
+                      <a href={e.link_externo} target="_blank" rel="noreferrer">
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  )}
+                  {e.caminho_pasta && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => navigator.clipboard?.writeText(e.caminho_pasta)}
+                    >
+                      <FolderOpen className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {e.caminho_arquivo && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => downloadEvidencia(e.caminho_arquivo, e.nome_arquivo)}
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
@@ -756,6 +817,16 @@ function AcaoDetalhes() {
       </Card>
     </div>
   );
+}
+
+function statusEvidenciaLabel(status: string | null | undefined) {
+  const labels: Record<string, string> = {
+    pendente: "Pendente",
+    enviada: "Enviada",
+    validada: "Validada",
+    rejeitada: "Rejeitada",
+  };
+  return labels[status ?? ""] ?? "Pendente";
 }
 
 function Info({ label, value }: { label: string; value: string }) {

@@ -19,6 +19,8 @@ export const EVIDENCIA_MIME_TYPES = [
   "image/png",
 ] as const;
 
+export const EVIDENCIA_STATUS = ["pendente", "enviada", "validada", "rejeitada"] as const;
+
 const optionalText = (max: number) =>
   z
     .string()
@@ -136,6 +138,21 @@ export const evidenciaUploadSchema = z.object({
   observacao: optionalText(1000),
 });
 
+export const evidenciaRegistroSchema = z.object({
+  acao_id: z.string().uuid(),
+  nome_evidencia: requiredText("Nome da evidencia", 1, 180),
+  tipo_evidencia: optionalText(80),
+  link_externo: optionalText(500),
+  caminho_pasta: optionalText(500),
+  numero_processo: optionalText(120),
+  data_evidencia: optionalDate,
+  observacao: optionalText(1000),
+  status: z.enum(EVIDENCIA_STATUS).default("pendente"),
+  nome_arquivo: optionalText(180),
+  tipo_arquivo: optionalText(120),
+  caminho_arquivo: optionalText(260),
+});
+
 export const vincularResponsavelAcaoSchema = z.object({
   acao_id: z.string().uuid(),
   responsavel_id: z.string().uuid(),
@@ -152,3 +169,4 @@ export type UpdateUsuarioInput = z.infer<typeof updateUsuarioSchema>;
 export type CreateAcaoInput = z.infer<typeof createAcaoSchema>;
 export type UpdateAcaoInput = z.infer<typeof updateAcaoSchema>;
 export type EvidenciaUploadInput = z.infer<typeof evidenciaUploadSchema>;
+export type EvidenciaRegistroInput = z.infer<typeof evidenciaRegistroSchema>;

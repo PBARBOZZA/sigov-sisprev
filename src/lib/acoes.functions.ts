@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import {
   apoiadorAcaoSchema,
   createAcaoSchema,
+  evidenciaRegistroSchema,
   evidenciaUploadSchema,
   updateAcaoSchema,
   vincularResponsavelAcaoSchema,
@@ -11,8 +12,22 @@ import {
 } from "@/lib/security-schemas";
 import { isBootstrapAdminEmail } from "@/lib/permissions";
 
+export const EVIDENCE_BUCKET = "evidencias";
+export const EVIDENCE_STORAGE_NOT_CONFIGURED_MESSAGE = "Armazenamento de arquivos não configurado.";
+
 const registerEvidenceSchema = evidenciaUploadSchema.extend({
   caminho_arquivo: z.string().min(1).max(260),
+  nome_evidencia: z.string().min(1).max(180).optional().nullable(),
+  tipo_evidencia: z.string().max(80).optional().nullable(),
+  link_externo: z.string().max(500).optional().nullable(),
+  caminho_pasta: z.string().max(500).optional().nullable(),
+  numero_processo: z.string().max(120).optional().nullable(),
+  data_evidencia: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .nullable(),
+  status: z.enum(["pendente", "enviada", "validada", "rejeitada"]).optional(),
 });
 
 async function getRoles(supabase: any, userId: string, email?: string | null) {
@@ -50,7 +65,11 @@ async function isApoiadorDaAcao(supabase: any, userId: string, acaoId: string) {
   return Boolean(data);
 }
 
-function assertOnlyAllowedFields(patch: Record<string, unknown>, allowed: string[], message: string) {
+function assertOnlyAllowedFields(
+  patch: Record<string, unknown>,
+  allowed: string[],
+  message: string,
+) {
   const allowedSet = new Set(allowed);
   const blocked = Object.keys(patch).filter((key) => !allowedSet.has(key));
   if (blocked.length > 0) throw new Error(message);
@@ -241,7 +260,10 @@ export const vincularResponsavelAcao = createServerFn({ method: "POST" })
     const patch: Record<string, string | null> = { responsavel_id: profile.id };
     if (data.atualizar_responsavel_nome) patch.responsavel_nome = profile.nome;
 
-    const { error } = await context.supabase.from("acoes").update(patch as any).eq("id", data.acao_id);
+    const { error } = await context.supabase
+      .from("acoes")
+      .update(patch as any)
+      .eq("id", data.acao_id);
     if (error) throw new Error(error.message);
 
     return { acao_id: data.acao_id, responsavel_id: profile.id, responsavel_nome: profile.nome };
@@ -316,6 +338,21 @@ export const prepareEvidenceUpload = createServerFn({ method: "POST" })
     return { path };
   });
 
+export const checkEvidenceStorageConfigured = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data, error } = await supabaseAdmin.storage.getBucket(EVIDENCE_BUCKET);
+
+      return { configured: Boolean(data && !error) };
+    } catch {
+      const { data, error } = await context.supabase.storage.getBucket(EVIDENCE_BUCKET);
+
+      return { configured: Boolean(data && !error) };
+    }
+  });
+
 export const registerEvidenceUpload = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(registerEvidenceSchema)
@@ -331,16 +368,72 @@ export const registerEvidenceUpload = createServerFn({ method: "POST" })
     const { error } = await context.supabase.from("evidencias").insert({
       acao_id: data.acao_id,
       usuario_id: context.userId,
-      nome_arquivo: data.nome_arquivo,
+      nome_arquivo: data.nome_evidencia || data.nome_arquivo,
       caminho_arquivo: data.caminho_arquivo,
       tipo_arquivo: data.tipo_arquivo,
+      tipo_evidencia: data.tipo_evidencia,
+      link_externo: data.link_externo,
+      caminho_pasta: data.caminho_pasta,
+      numero_processo: data.numero_processo,
+      data_evidencia: data.data_evidencia,
       observacao: data.observacao,
+      observacoes: data.observacao,
+      status: data.status ?? "enviada",
     });
 
     if (error) {
-      await context.supabase.storage.from("evidencias").remove([data.caminho_arquivo]);
+      await context.supabase.storage.from(EVIDENCE_BUCKET).remove([data.caminho_arquivo]);
       throw new Error(error.message);
     }
 
     return { path: data.caminho_arquivo };
+  });
+
+export const registerEvidenceRecord = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(evidenciaRegistroSchema)
+  .handler(async ({ data, context }) => {
+    await assertEvidencePermission(
+      context.supabase,
+      context.userId,
+      data.acao_id,
+      (context.claims as any)?.email,
+    );
+
+    if (data.caminho_arquivo) {
+      validateEvidencePath(
+        {
+          acao_id: data.acao_id,
+          nome_arquivo: data.nome_arquivo || data.nome_evidencia,
+          tipo_arquivo: data.tipo_arquivo as EvidenciaUploadInput["tipo_arquivo"],
+          tamanho: 1,
+          observacao: data.observacao,
+        },
+        context.userId,
+        data.caminho_arquivo,
+      );
+    }
+
+    const { data: created, error } = await context.supabase
+      .from("evidencias")
+      .insert({
+        acao_id: data.acao_id,
+        usuario_id: context.userId,
+        nome_arquivo: data.nome_evidencia,
+        caminho_arquivo: data.caminho_arquivo,
+        tipo_arquivo: data.tipo_arquivo,
+        tipo_evidencia: data.tipo_evidencia,
+        link_externo: data.link_externo,
+        caminho_pasta: data.caminho_pasta,
+        numero_processo: data.numero_processo,
+        data_evidencia: data.data_evidencia,
+        observacao: data.observacao,
+        observacoes: data.observacao,
+        status: data.status,
+      })
+      .select("id")
+      .single();
+
+    if (error) throw new Error(error.message);
+    return { id: created.id };
   });
