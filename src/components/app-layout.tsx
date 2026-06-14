@@ -301,16 +301,25 @@ function NotificationPreview({
       </div>
       <div className="flex items-center justify-between gap-2">
         <span className="text-[11px] text-muted-foreground">{formatNotificationDate(item.created_at)}</span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs"
-          onClick={onMarkRead}
-          disabled={disabled}
-        >
-          Marcar como lida
-        </Button>
+        <div className="flex items-center gap-1">
+          {item.acao_id && (
+            <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
+              <Link to="/plano-acao/$id" params={{ id: item.acao_id }}>
+                Ver ação
+              </Link>
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={onMarkRead}
+            disabled={disabled}
+          >
+            Marcar como lida
+          </Button>
+        </div>
       </div>
     </div>
   );

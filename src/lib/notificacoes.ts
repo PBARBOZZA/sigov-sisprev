@@ -79,6 +79,11 @@ export async function marcarNotificacaoComoLida(id: string) {
   if (error) throw new Error(error.message);
 }
 
+export async function marcarTodasNotificacoesComoLidas() {
+  const { error } = await supabase.from("notificacoes").update({ lida: true }).eq("lida", false);
+  if (error) throw new Error(error.message);
+}
+
 export function labelTipoNotificacao(tipo: string) {
   const labels: Record<string, string> = {
     acao_vencendo: "Vencimento",

@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import {
   labelTipoNotificacao,
   listarNotificacoes,
+  marcarTodasNotificacoesComoLidas,
   marcarNotificacaoComoLida,
   type Notificacao,
 } from "@/lib/notificacoes";
@@ -33,6 +34,14 @@ function Notificacoes() {
     },
   });
 
+  const markAllRead = useMutation({
+    mutationFn: marcarTodasNotificacoesComoLidas,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
+      void queryClient.invalidateQueries({ queryKey: ["notificacoes-resumo"] });
+    },
+  });
+
   const unreadCount = notificacoes.filter((item) => !item.lida).length;
 
   return (
@@ -47,9 +56,21 @@ function Notificacoes() {
             Alertas internos sobre prazos, evidências e acesso de usuários.
           </p>
         </div>
-        <Badge variant={unreadCount > 0 ? "default" : "secondary"} className="w-fit">
-          {unreadCount} não lida{unreadCount === 1 ? "" : "s"}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={unreadCount > 0 ? "default" : "secondary"} className="w-fit">
+            {unreadCount} não lida{unreadCount === 1 ? "" : "s"}
+          </Badge>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => markAllRead.mutate()}
+            disabled={unreadCount === 0 || markAllRead.isPending}
+          >
+            <Check className="h-4 w-4" />
+            Marcar todas como lidas
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -68,7 +89,7 @@ function Notificacoes() {
               key={item.id}
               item={item}
               onMarkRead={() => markRead.mutate(item.id)}
-              disabled={markRead.isPending}
+              disabled={markRead.isPending || markAllRead.isPending}
             />
           ))}
         </Card>
@@ -112,19 +133,27 @@ function NotificationRow({
         content
       )}
 
-      {!item.lida && (
+      <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+        {item.acao_id && (
+          <Button asChild variant="outline" size="sm">
+            <Link to="/plano-acao/$id" params={{ id: item.acao_id }}>
+              Ver ação
+            </Link>
+          </Button>
+        )}
+        {!item.lida && (
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="shrink-0"
           onClick={onMarkRead}
           disabled={disabled}
         >
           <Check className="h-4 w-4" />
           Marcar como lida
         </Button>
-      )}
+        )}
+      </div>
     </div>
   );
 }
