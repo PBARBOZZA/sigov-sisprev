@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
+import { buscarAcoesPlanoAcao, normalizarStatusAcao, type AcaoPlano } from "@/lib/acoes-data";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +15,9 @@ import {
   AlarmClock,
   TrendingUp,
   Loader2,
+  UserCheck,
+  FileText,
+  ShieldCheck,
 } from "lucide-react";
 import {
   PieChart,
@@ -26,12 +31,15 @@ import {
   Tooltip,
   Legend,
   CartesianGrid,
+  LineChart,
+  Line,
 } from "recharts";
 import { STATUS_LABELS, fmtDate, prazoCor } from "@/lib/acao-helpers";
-import { differenceInDays, parseISO } from "date-fns";
+import { differenceInDays, format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
-  head: () => ({ meta: [{ title: "Dashboard Executivo — SIGOV-SISPREV" }] }),
+  head: () => ({ meta: [{ title: "Dashboard Executivo - SIGOV-SISPREV" }] }),
   component: Dashboard,
 });
 
@@ -43,141 +51,107 @@ const STATUS_COLOR_HEX: Record<string, string> = {
   cancelada: "#64748b",
 };
 
-type NomeRef = { nome: string | null };
-type DashboardAcao = {
-  area?: NomeRef | null;
-  responsavel?: NomeRef | null;
-  responsavel_nome?: string | null;
-  eixo?: NomeRef | null;
-  programa_ref?: NomeRef | null;
-  eixo_estrategico?: string | null;
-  programa?: string | null;
-};
+type RefOption = { id: string; nome: string | null };
+type Apoio = { acao_id: string; usuario_id: string };
+type Evidencia = { acao_id: string };
+type ChartItem = { name: string; value: number; key?: string };
 
 function Dashboard() {
-  const { data, isLoading } = useQuery({
-    queryKey: ["dashboard-acoes"],
-    queryFn: async () => {
-      const { data: acoes } = await supabase
-        .from("acoes")
-        .select(
-          "*, area:areas(nome), responsavel:profiles!acoes_responsavel_id_fkey(nome), plano:plano_anual(id,ano,nome), eixo:pga_eixos(id,nome,codigo), programa_ref:pga_programas(id,nome,codigo)",
-        )
-        .order("updated_at", { ascending: false });
-      return acoes ?? [];
-    },
+  const { user, permissionLevel } = useAuth();
+
+  const { data: acoes, isLoading } = useQuery({
+    queryKey: ["acoes-list"],
+    queryFn: buscarAcoesPlanoAcao,
   });
 
-  if (isLoading)
+  const { data: areas } = useQuery({
+    queryKey: ["areas-options"],
+    queryFn: async () => (await supabase.from("areas").select("id,nome").order("nome")).data ?? [],
+  });
+
+  const { data: usuarios } = useQuery({
+    queryKey: ["usuarios-options"],
+    queryFn: async () =>
+      (await supabase.from("profiles").select("id,nome").order("nome")).data ?? [],
+  });
+
+  const { data: eixos } = useQuery({
+    queryKey: ["pga-eixos-options"],
+    queryFn: async () =>
+      (await supabase.from("pga_eixos").select("id,nome").order("ordem")).data ?? [],
+  });
+
+  const { data: programas } = useQuery({
+    queryKey: ["pga-programas-options"],
+    queryFn: async () =>
+      (await supabase.from("pga_programas").select("id,nome").order("ordem")).data ?? [],
+  });
+
+  const { data: evidencias } = useQuery({
+    queryKey: ["dashboard-evidencias-index"],
+    queryFn: async () => (await supabase.from("evidencias").select("acao_id")).data ?? [],
+  });
+
+  const { data: apoiadores } = useQuery({
+    queryKey: ["acoes-apoiadores-list"],
+    queryFn: async () =>
+      (await supabase.from("acoes_apoiadores").select("acao_id,usuario_id")).data ?? [],
+  });
+
+  if (isLoading) {
     return (
       <div className="flex justify-center p-12">
-        <Loader2 className="animate-spin h-6 w-6 text-primary" />
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     );
-  const acoes = data ?? [];
+  }
 
-  const total = acoes.length;
-  const byStatus = acoes.reduce<Record<string, number>>((acc, a) => {
-    acc[a.status] = (acc[a.status] || 0) + 1;
-    return acc;
-  }, {});
-  const concluidas = byStatus.concluida || 0;
-  const emAnd = byStatus.em_andamento || 0;
-  const naoIni = byStatus.nao_iniciada || 0;
-  const canceladas = byStatus.cancelada || 0;
-  const atrasadas = acoes.filter(
-    (a) =>
-      a.prazo_final &&
-      a.status !== "concluida" &&
-      a.status !== "cancelada" &&
-      differenceInDays(parseISO(a.prazo_final), new Date()) < 0,
-  ).length;
-  const vencendo30 = acoes.filter((a) => {
-    if (!a.prazo_final || a.status === "concluida" || a.status === "cancelada") return false;
-    const d = differenceInDays(parseISO(a.prazo_final), new Date());
-    return d >= 0 && d <= 30;
-  }).length;
-  const percGeral = total
-    ? Math.round(acoes.reduce((s, a) => s + (a.percentual_execucao || 0), 0) / total)
-    : 0;
-  const percConcluidas = total ? Math.round((concluidas / total) * 100) : 0;
-  const emAberto = Math.max(total - concluidas - canceladas, 0);
-
-  const pieData = Object.entries(byStatus).map(([s, v]) => ({
-    name: STATUS_LABELS[s] ?? s,
-    value: v,
-    key: s,
-  }));
-
-  const byArea = Object.values(
-    acoes.reduce<Record<string, { area: string; total: number; concluidas: number }>>((acc, a) => {
-      const nome = a.area?.nome ?? "Sem área";
-      if (!acc[nome]) acc[nome] = { area: nome, total: 0, concluidas: 0 };
-      acc[nome].total++;
-      if (a.status === "concluida") acc[nome].concluidas++;
-      return acc;
-    }, {}),
+  const items = acoes ?? [];
+  const evidenceActionIds = new Set((evidencias ?? []).map((e: Evidencia) => e.acao_id));
+  const apoioActionIds = new Set(
+    (apoiadores ?? [])
+      .filter((apoiador: Apoio) => apoiador.usuario_id === user?.id)
+      .map((apoiador: Apoio) => apoiador.acao_id),
   );
 
-  const byResp = Object.values(
-    acoes.reduce<Record<string, { resp: string; total: number }>>((acc, a) => {
-      const nome = a.responsavel?.nome ?? a.responsavel_nome ?? "Sem responsável";
-      if (!acc[nome]) acc[nome] = { resp: nome, total: 0 };
-      acc[nome].total++;
-      return acc;
-    }, {}),
-  )
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 8);
+  const total = items.length;
+  const naoIniciadas = countStatus(items, "nao_iniciada");
+  const emAndamento = countStatus(items, "em_andamento");
+  const concluidas = countStatus(items, "concluida");
+  const atrasadasLista = items.filter(isAtrasada);
+  const vencendo30Lista = items.filter(isVencendo30);
+  const semEvidencia = items.filter((acao) => !evidenceActionIds.has(acao.id));
+  const percentualGeral = total
+    ? Math.round(items.reduce((sum, acao) => sum + (acao.percentual_execucao ?? 0), 0) / total)
+    : 0;
 
-  const byEixo = Object.values(
-    acoes.reduce<
-      Record<string, { eixo: string; total: number; concluidas: number; percentual: number }>
-    >((acc, a) => {
-      const nome = getEixoNome(a);
-      if (!acc[nome]) acc[nome] = { eixo: nome, total: 0, concluidas: 0, percentual: 0 };
-      acc[nome].total++;
-      acc[nome].percentual += a.percentual_execucao || 0;
-      if (a.status === "concluida") acc[nome].concluidas++;
-      return acc;
-    }, {}),
-  )
-    .map((e) => ({
-      ...e,
-      percentual: e.total ? Math.round(e.percentual / e.total) : 0,
-    }))
-    .sort((a, b) => a.eixo.localeCompare(b.eixo));
+  const minhasAcoes = user
+    ? items.filter((acao) => acao.responsavel_id === user.id || apoioActionIds.has(acao.id))
+    : [];
+  const minhasPendencias = {
+    total: minhasAcoes.length,
+    emAndamento: minhasAcoes.filter((acao) => normalizarStatusAcao(acao.status) === "em_andamento")
+      .length,
+    atrasadas: minhasAcoes.filter(isAtrasada).length,
+    vencendo30: minhasAcoes.filter(isVencendo30).length,
+  };
 
-  const byPrograma = Object.values(
-    acoes.reduce<Record<string, { programa: string; total: number; concluidas: number }>>(
-      (acc, a) => {
-        const nome = getProgramaNome(a);
-        if (!acc[nome]) acc[nome] = { programa: nome, total: 0, concluidas: 0 };
-        acc[nome].total++;
-        if (a.status === "concluida") acc[nome].concluidas++;
-        return acc;
-      },
-      {},
-    ),
-  ).sort((a, b) => b.total - a.total);
-
-  const proximasVencer = acoes
-    .filter((a) => {
-      if (!a.prazo_final || a.status === "concluida") return false;
-      const d = differenceInDays(parseISO(a.prazo_final), new Date());
-      return d >= 0 && d <= 30;
-    })
-    .slice(0, 5);
-
-  const ultimasAtualizadas = acoes.slice(0, 5);
+  const proGestao = calcProGestao(items, eixos, programas);
+  const statusData = buildStatusData(items);
+  const areaData = buildAreaData(items, areas);
+  const responsavelData = buildResponsavelData(items, usuarios).slice(0, 8);
+  const evolucaoData = buildEvolucaoConclusao(items);
+  const ultimasAtualizadas = [...items]
+    .sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""))
+    .slice(0, 6);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <h1 className="text-2xl font-bold">Dashboard Executivo</h1>
           <p className="text-sm text-muted-foreground">
-            Resumo do PGA / Plano de Ação para acompanhamento diário.
+            Visão de consulta do PGA, governança e pendências operacionais.
           </p>
         </div>
         <Button asChild variant="outline">
@@ -185,308 +159,487 @@ function Dashboard() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <KpiCard
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+        <KpiLink
           label="Total de ações"
           value={total}
-          description={`${emAberto} em aberto`}
+          description="PGA completo"
           icon={ListChecks}
+          to="/plano-acao"
         />
-        <KpiCard
+        <KpiLink
+          label="Não iniciadas"
+          value={naoIniciadas}
+          icon={Clock}
+          tone="muted"
+          to="/plano-acao"
+          search={{ status: "nao_iniciada" }}
+        />
+        <KpiLink
           label="Em andamento"
-          value={emAnd}
-          description="Execução ativa"
+          value={emAndamento}
           icon={TrendingUp}
           tone="info"
+          to="/plano-acao"
+          search={{ status: "em_andamento" }}
         />
-        <KpiCard
+        <KpiLink
           label="Concluídas"
           value={concluidas}
-          description={`${percConcluidas}% do total`}
           icon={CheckCircle2}
           tone="success"
+          to="/plano-acao"
+          search={{ status: "concluida" }}
         />
-        <KpiCard label="Atrasadas" value={atrasadas} icon={AlertTriangle} tone="destructive" />
-        <KpiCard label="Vencendo 30d" value={vencendo30} icon={AlarmClock} tone="warning" />
-        <KpiCard label="Não iniciadas" value={naoIni} icon={Clock} tone="muted" />
+        <KpiLink
+          label="Atrasadas"
+          value={atrasadasLista.length}
+          icon={AlertTriangle}
+          tone="destructive"
+          to="/plano-acao"
+          search={{ prazo: "atrasadas" }}
+        />
+        <KpiLink
+          label="Vencendo 30 dias"
+          value={vencendo30Lista.length}
+          icon={AlarmClock}
+          tone="warning"
+          to="/plano-acao"
+          search={{ prazo: "vence_30" }}
+        />
+        <KpiLink
+          label="Execução geral"
+          value={`${percentualGeral}%`}
+          description="Média das ações"
+          icon={ShieldCheck}
+          to="/plano-acao"
+        />
       </div>
 
-      <Card className="p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <div>
-            <p className="text-sm font-medium">Execução geral</p>
-            <p className="text-xs text-muted-foreground">
-              Média simples do percentual informado nas ações.
-            </p>
+      <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
+        <Card className="p-5">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Minhas Pendências</p>
+              <p className="text-xs text-muted-foreground">
+                Ações sob sua responsabilidade ou apoio.
+              </p>
+            </div>
+            {permissionLevel !== "consulta" && (
+              <Button asChild size="sm" variant="outline">
+                <Link to="/minhas-acoes">Ver minhas ações</Link>
+              </Button>
+            )}
           </div>
-          <p className="text-3xl font-bold text-primary">{percGeral}%</p>
-        </div>
-        <Progress value={percGeral} />
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <StatusOverview label="Concluídas" value={concluidas} total={total} tone="success" />
-          <StatusOverview label="Em aberto" value={emAberto} total={total} tone="primary" />
-          <StatusOverview
-            label="Atenção"
-            value={atrasadas + vencendo30}
-            total={total}
-            tone="warning"
-          />
-        </div>
-      </Card>
-
-      <div className="grid lg:grid-cols-2 gap-4">
-        <Card className="p-6">
-          <h3 className="font-semibold mb-4">Execução por Eixo</h3>
-          {byEixo.length === 0 ? (
-            <Empty />
-          ) : (
-            <ul className="space-y-4">
-              {byEixo.map((e) => (
-                <li key={e.eixo}>
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{e.eixo}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {e.concluidas} de {e.total} ações concluídas
-                      </p>
-                    </div>
-                    <p className="text-sm font-semibold text-primary">{e.percentual}%</p>
-                  </div>
-                  <Progress value={e.percentual} />
-                </li>
-              ))}
-            </ul>
-          )}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <MiniMetric label="Minhas ações" value={minhasPendencias.total} />
+            <MiniMetric label="Em andamento" value={minhasPendencias.emAndamento} tone="info" />
+            <MiniMetric label="Atrasadas" value={minhasPendencias.atrasadas} tone="destructive" />
+            <MiniMetric label="Vencendo 30d" value={minhasPendencias.vencendo30} tone="warning" />
+          </div>
         </Card>
 
-        <Card className="p-6">
-          <h3 className="font-semibold mb-4">Ações por Programa</h3>
-          {byPrograma.length === 0 ? (
-            <Empty />
-          ) : (
-            <ul className="divide-y">
-              {byPrograma.map((p) => (
-                <li key={p.programa} className="py-3 first:pt-0 last:pb-0">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium min-w-0 truncate">{p.programa}</p>
-                    <Badge variant="outline">{p.total}</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">{p.concluidas} concluídas</p>
-                </li>
-              ))}
-            </ul>
-          )}
+        <Card className="p-5">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Pró-Gestão / Governança</p>
+              <p className="text-xs text-muted-foreground">
+                Identificado por eixo ou programa de governança, controle interno, Pró-Gestão ou
+                educação previdenciária.
+              </p>
+            </div>
+            <p className="text-2xl font-bold text-primary">{proGestao.percentual}%</p>
+          </div>
+          <Progress value={proGestao.percentual} />
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            <MiniMetric label="Total" value={proGestao.total} />
+            <MiniMetric label="Concluídas" value={proGestao.concluidas} tone="success" />
+            <MiniMetric label="Em andamento" value={proGestao.emAndamento} tone="info" />
+          </div>
         </Card>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-4">
-        <Card className="p-6">
-          <h3 className="font-semibold mb-4">Ações por status</h3>
-          {pieData.length === 0 ? (
-            <Empty />
-          ) : (
-            <div className="h-64">
-              <ResponsiveContainer>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    label
-                  >
-                    {pieData.map((d) => (
-                      <Cell key={d.key} fill={STATUS_COLOR_HEX[d.key] || "#94a3b8"} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </Card>
-        <Card className="p-6">
-          <h3 className="font-semibold mb-4">Ações por área</h3>
-          {byArea.length === 0 ? (
-            <Empty />
-          ) : (
-            <div className="h-64">
-              <ResponsiveContainer>
-                <BarChart data={byArea}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis
-                    dataKey="area"
-                    tick={{ fontSize: 10 }}
-                    angle={-15}
-                    textAnchor="end"
-                    height={60}
-                  />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Bar dataKey="total" fill="hsl(var(--primary))" name="Total" />
-                  <Bar dataKey="concluidas" fill="#16a34a" name="Concluídas" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </Card>
-      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ChartCard title="Ações por status">
+          <ResponsiveContainer>
+            <PieChart>
+              <Pie
+                data={statusData}
+                dataKey="value"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                outerRadius={82}
+                label
+              >
+                {statusData.map((item) => (
+                  <Cell key={item.key} fill={STATUS_COLOR_HEX[item.key ?? ""] ?? "#94a3b8"} />
+                ))}
+              </Pie>
+              <Tooltip />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </ChartCard>
 
-      <Card className="p-6">
-        <h3 className="font-semibold mb-4">Top responsáveis por carga de ações</h3>
-        {byResp.length === 0 ? (
-          <Empty />
-        ) : (
-          <div className="h-56">
+        <ChartCard title="Ações por área">
+          <ResponsiveContainer>
+            <BarChart data={areaData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 10 }}
+                angle={-15}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis tick={{ fontSize: 10 }} />
+              <Tooltip />
+              <Bar dataKey="value" fill="hsl(var(--primary))" name="Ações" />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="Ações por responsável">
+          <ResponsiveContainer>
+            <BarChart data={responsavelData} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis type="number" tick={{ fontSize: 10 }} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={140} />
+              <Tooltip />
+              <Bar dataKey="value" fill="hsl(var(--primary))" name="Ações" />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="Evolução de conclusão">
+          {evolucaoData.length < 2 ? (
+            <Empty text="Dados insuficientes para evolução histórica." />
+          ) : (
             <ResponsiveContainer>
-              <BarChart data={byResp} layout="vertical">
+              <LineChart data={evolucaoData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis type="number" tick={{ fontSize: 10 }} />
-                <YAxis type="category" dataKey="resp" tick={{ fontSize: 10 }} width={140} />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
                 <Tooltip />
-                <Bar dataKey="total" fill="hsl(var(--primary))" />
-              </BarChart>
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  name="Concluídas"
+                />
+              </LineChart>
             </ResponsiveContainer>
-          </div>
-        )}
-      </Card>
+          )}
+        </ChartCard>
+      </div>
 
-      <div className="grid lg:grid-cols-2 gap-4">
-        <Card className="p-6">
-          <h3 className="font-semibold mb-3">Ações vencendo nos próximos 30 dias</h3>
-          {proximasVencer.length === 0 ? (
-            <Empty text="Nenhuma ação próxima do vencimento." />
-          ) : (
-            <ul className="space-y-2">
-              {proximasVencer.map((a) => {
-                const pz = prazoCor(a.prazo_final, a.status);
-                return (
-                  <li key={a.id}>
-                    <Link
-                      to="/plano-acao/$id"
-                      params={{ id: a.id }}
-                      className="flex items-center justify-between gap-3 p-3 rounded-md border hover:bg-accent"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{a.titulo}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {a.area?.nome ?? "—"} · {fmtDate(a.prazo_final)}
-                        </p>
-                      </div>
-                      <Badge className={pz.color}>{pz.label}</Badge>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
-        <Card className="p-6">
-          <h3 className="font-semibold mb-3">Últimas ações atualizadas</h3>
-          {ultimasAtualizadas.length === 0 ? (
-            <Empty />
-          ) : (
-            <ul className="space-y-2">
-              {ultimasAtualizadas.map((a) => (
-                <li key={a.id}>
-                  <Link
-                    to="/plano-acao/$id"
-                    params={{ id: a.id }}
-                    className="flex items-center justify-between gap-3 p-3 rounded-md border hover:bg-accent"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{a.titulo}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {a.responsavel?.nome ?? a.responsavel_nome ?? "—"} · {a.percentual_execucao}
-                        %
-                      </p>
-                    </div>
-                    <Badge variant="outline">{STATUS_LABELS[a.status]}</Badge>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <QuickList
+          title="Ações atrasadas"
+          items={atrasadasLista.slice(0, 6)}
+          areas={areas}
+          usuarios={usuarios}
+        />
+        <QuickList
+          title="Ações vencendo em 30 dias"
+          items={vencendo30Lista.slice(0, 6)}
+          areas={areas}
+          usuarios={usuarios}
+        />
+        <QuickList
+          title="Últimas ações atualizadas"
+          items={ultimasAtualizadas}
+          areas={areas}
+          usuarios={usuarios}
+          showUpdatedAt
+        />
+        <QuickList
+          title="Ações sem evidência cadastrada"
+          items={semEvidencia.slice(0, 6)}
+          areas={areas}
+          usuarios={usuarios}
+          action={
+            <Button asChild size="sm" variant="outline">
+              <Link to="/evidencias">Ver evidências</Link>
+            </Button>
+          }
+        />
       </div>
     </div>
   );
 }
 
-function KpiCard({
+function KpiLink({
   label,
   value,
   description,
   icon: Icon,
   tone = "primary",
+  to,
+  search,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   description?: string;
   icon: React.ComponentType<{ className?: string }>;
-  tone?: string;
+  tone?: "primary" | "success" | "info" | "warning" | "destructive" | "muted";
+  to: "/plano-acao" | "/evidencias";
+  search?: Record<string, string>;
 }) {
-  const toneMap: Record<string, string> = {
-    primary: "bg-primary/10 text-primary border-primary/20",
-    success: "bg-success/15 text-success border-success/25",
-    info: "bg-info/15 text-info border-info/25",
-    warning: "bg-warning/20 text-warning-foreground border-warning/30",
-    destructive: "bg-destructive/15 text-destructive border-destructive/25",
-    muted: "bg-muted text-muted-foreground border-border",
-  };
   return (
-    <Card className="p-4">
-      <div className="flex items-center justify-between mb-2">
-        <div className={`grid h-8 w-8 place-items-center rounded-md border ${toneMap[tone]}`}>
-          <Icon className="h-4 w-4" />
+    <Link to={to} search={search} className="block">
+      <Card className="h-full p-4 transition-colors hover:bg-accent">
+        <div className="mb-3 flex items-center justify-between">
+          <div className={`grid h-8 w-8 place-items-center rounded-md border ${toneClass(tone)}`}>
+            <Icon className="h-4 w-4" />
+          </div>
         </div>
-      </div>
-      <p className="text-2xl font-bold">{value}</p>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      {description && <p className="mt-1 text-[11px] text-muted-foreground">{description}</p>}
-    </Card>
+        <p className="text-2xl font-bold">{value}</p>
+        <p className="text-xs text-muted-foreground">{label}</p>
+        {description && <p className="mt-1 text-[11px] text-muted-foreground">{description}</p>}
+      </Card>
+    </Link>
   );
 }
 
-function StatusOverview({
+function MiniMetric({
   label,
   value,
-  total,
-  tone,
+  tone = "primary",
 }: {
   label: string;
   value: number;
-  total: number;
-  tone: "primary" | "success" | "warning";
+  tone?: "primary" | "success" | "info" | "warning" | "destructive";
 }) {
-  const percent = total ? Math.round((value / total) * 100) : 0;
-  const toneMap = {
+  const textTone = {
     primary: "text-primary",
     success: "text-success",
+    info: "text-info",
     warning: "text-warning-foreground",
-  };
+    destructive: "text-destructive",
+  }[tone];
+
   return (
     <div className="rounded-md border bg-muted/30 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-medium text-muted-foreground">{label}</p>
-        <p className={`text-sm font-semibold ${toneMap[tone]}`}>{percent}%</p>
-      </div>
-      <p className="mt-1 text-lg font-bold">{value}</p>
+      <p className={`text-xl font-bold ${textTone}`}>{value}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
     </div>
   );
 }
 
-function Empty({ text = "Sem dados ainda." }: { text?: string }) {
-  return <p className="text-sm text-muted-foreground text-center py-8">{text}</p>;
+function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Card className="p-5">
+      <h3 className="mb-4 font-semibold">{title}</h3>
+      <div className="h-64">{children}</div>
+    </Card>
+  );
 }
 
-function getEixoNome(acao: DashboardAcao) {
-  return acao.eixo?.nome ?? acao.eixo_estrategico ?? "Sem eixo";
+function QuickList({
+  title,
+  items,
+  areas,
+  usuarios,
+  showUpdatedAt = false,
+  action,
+}: {
+  title: string;
+  items: AcaoPlano[];
+  areas?: RefOption[];
+  usuarios?: RefOption[];
+  showUpdatedAt?: boolean;
+  action?: React.ReactNode;
+}) {
+  return (
+    <Card className="p-5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="font-semibold">{title}</h3>
+        {action}
+      </div>
+      {items.length === 0 ? (
+        <Empty />
+      ) : (
+        <ul className="space-y-2">
+          {items.map((acao) => {
+            const status = normalizarStatusAcao(acao.status);
+            const prazo = prazoCor(acao.prazo_final, status);
+            return (
+              <li key={acao.id}>
+                <Link
+                  to="/plano-acao/$id"
+                  params={{ id: acao.id }}
+                  className="flex items-center justify-between gap-3 rounded-md border p-3 hover:bg-accent"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{acao.titulo}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {getAreaNome(acao, areas)} - {getResponsavelNome(acao, usuarios)}
+                    </p>
+                    {showUpdatedAt && (
+                      <p className="text-xs text-muted-foreground">
+                        Atualizada em {fmtDate(acao.updated_at)}
+                      </p>
+                    )}
+                  </div>
+                  <Badge className={prazo.color}>{prazo.label}</Badge>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
+  );
 }
 
-function getProgramaNome(acao: DashboardAcao) {
-  return acao.programa_ref?.nome ?? acao.programa ?? "Sem programa";
+function Empty({ text = "Sem dados para exibir." }: { text?: string }) {
+  return <p className="py-8 text-center text-sm text-muted-foreground">{text}</p>;
+}
+
+function toneClass(tone: string) {
+  const toneMap: Record<string, string> = {
+    primary: "border-primary/20 bg-primary/10 text-primary",
+    success: "border-success/25 bg-success/15 text-success",
+    info: "border-info/25 bg-info/15 text-info",
+    warning: "border-warning/30 bg-warning/20 text-warning-foreground",
+    destructive: "border-destructive/25 bg-destructive/15 text-destructive",
+    muted: "border-border bg-muted text-muted-foreground",
+  };
+  return toneMap[tone] ?? toneMap.primary;
+}
+
+function countStatus(acoes: AcaoPlano[], status: string) {
+  return acoes.filter((acao) => normalizarStatusAcao(acao.status) === status).length;
+}
+
+function isAtrasada(acao: AcaoPlano) {
+  if (!acao.prazo_final || isClosed(acao)) return false;
+  return differenceInDays(parseISO(acao.prazo_final), new Date()) < 0;
+}
+
+function isVencendo30(acao: AcaoPlano) {
+  if (!acao.prazo_final || isClosed(acao)) return false;
+  const days = differenceInDays(parseISO(acao.prazo_final), new Date());
+  return days >= 0 && days <= 30;
+}
+
+function isClosed(acao: AcaoPlano) {
+  const status = normalizarStatusAcao(acao.status);
+  return status === "concluida" || status === "cancelada";
+}
+
+function buildStatusData(acoes: AcaoPlano[]): ChartItem[] {
+  const counts = acoes.reduce<Record<string, number>>((acc, acao) => {
+    const status = normalizarStatusAcao(acao.status);
+    acc[status] = (acc[status] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return Object.entries(counts).map(([status, value]) => ({
+    name: STATUS_LABELS[status] ?? status,
+    value,
+    key: status,
+  }));
+}
+
+function buildAreaData(acoes: AcaoPlano[], areas?: RefOption[]): ChartItem[] {
+  return Object.values(
+    acoes.reduce<Record<string, ChartItem>>((acc, acao) => {
+      const name = getAreaNome(acao, areas);
+      if (!acc[name]) acc[name] = { name, value: 0 };
+      acc[name].value++;
+      return acc;
+    }, {}),
+  ).sort((a, b) => b.value - a.value);
+}
+
+function buildResponsavelData(acoes: AcaoPlano[], usuarios?: RefOption[]): ChartItem[] {
+  return Object.values(
+    acoes.reduce<Record<string, ChartItem>>((acc, acao) => {
+      const name = getResponsavelNome(acao, usuarios);
+      if (!acc[name]) acc[name] = { name, value: 0 };
+      acc[name].value++;
+      return acc;
+    }, {}),
+  ).sort((a, b) => b.value - a.value);
+}
+
+function buildEvolucaoConclusao(acoes: AcaoPlano[]): ChartItem[] {
+  const concluidas = acoes
+    .filter((acao) => normalizarStatusAcao(acao.status) === "concluida" && acao.updated_at)
+    .sort((a, b) => (a.updated_at ?? "").localeCompare(b.updated_at ?? ""));
+
+  const grouped = concluidas.reduce<Record<string, number>>((acc, acao) => {
+    const key = format(parseISO(acao.updated_at as string), "MM/yyyy", { locale: ptBR });
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  let cumulative = 0;
+  return Object.entries(grouped).map(([name, value]) => {
+    cumulative += value;
+    return { name, value: cumulative };
+  });
+}
+
+function calcProGestao(acoes: AcaoPlano[], eixos?: RefOption[], programas?: RefOption[]) {
+  const filtered = acoes.filter((acao) => {
+    const text = `${getEixoNome(acao, eixos)} ${getProgramaNome(acao, programas)}`;
+    return /pro-?gest[aã]o|governan[cç]a|controle interno|educa[cç][aã]o previdenci[aá]ria/i.test(
+      normalizeText(text),
+    );
+  });
+
+  const total = filtered.length;
+  const concluidas = countStatus(filtered, "concluida");
+  const emAndamento = countStatus(filtered, "em_andamento");
+  const percentual = total
+    ? Math.round(filtered.reduce((sum, acao) => sum + (acao.percentual_execucao ?? 0), 0) / total)
+    : 0;
+
+  return { total, concluidas, emAndamento, percentual };
+}
+
+function getAreaNome(acao: AcaoPlano, areas?: RefOption[]) {
+  return (
+    (acao.area_id ? areas?.find((area) => area.id === acao.area_id)?.nome : null) ?? "Sem área"
+  );
+}
+
+function getResponsavelNome(acao: AcaoPlano, usuarios?: RefOption[]) {
+  return (
+    (acao.responsavel_id
+      ? usuarios?.find((usuario) => usuario.id === acao.responsavel_id)?.nome
+      : null) ??
+    acao.responsavel_nome ??
+    "Sem responsável"
+  );
+}
+
+function getEixoNome(acao: AcaoPlano, eixos?: RefOption[]) {
+  return (
+    (acao.eixo_id ? eixos?.find((eixo) => eixo.id === acao.eixo_id)?.nome : null) ??
+    acao.eixo_estrategico ??
+    "Sem eixo"
+  );
+}
+
+function getProgramaNome(acao: AcaoPlano, programas?: RefOption[]) {
+  return (
+    (acao.programa_id
+      ? programas?.find((programa) => programa.id === acao.programa_id)?.nome
+      : null) ??
+    acao.programa ??
+    "Sem programa"
+  );
+}
+
+function normalizeText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }

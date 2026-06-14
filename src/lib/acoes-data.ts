@@ -36,6 +36,8 @@ export type AcaoPlano = {
   programa?: string | null;
   prazo_final: string | null;
   status: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 export async function buscarAcoesPlanoAcao(): Promise<AcaoPlano[]> {
