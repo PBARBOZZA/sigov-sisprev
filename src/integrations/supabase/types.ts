@@ -348,6 +348,7 @@ export type Database = {
       };
       notificacoes: {
         Row: {
+          acao_id: string | null;
           created_at: string;
           id: string;
           lida: boolean;
@@ -359,6 +360,7 @@ export type Database = {
           usuario_id: string;
         };
         Insert: {
+          acao_id?: string | null;
           created_at?: string;
           id?: string;
           lida?: boolean;
@@ -370,6 +372,7 @@ export type Database = {
           usuario_id: string;
         };
         Update: {
+          acao_id?: string | null;
           created_at?: string;
           id?: string;
           lida?: boolean;
@@ -665,6 +668,7 @@ export type Database = {
       };
       is_active_user: { Args: { _user_id: string }; Returns: boolean };
       is_admin_or_diretoria: { Args: { _user_id: string }; Returns: boolean };
+      gerar_notificacoes_inteligentes: { Args: Record<PropertyKey, never>; Returns: number };
     };
     Enums: {
       acao_prioridade: "baixa" | "media" | "alta" | "critica";
