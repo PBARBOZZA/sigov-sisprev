@@ -1,12 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/auth";
-import { Card } from "@/components/ui/card";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Bell, Check, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Bell, AlertTriangle, AlarmClock, CheckCircle2 } from "lucide-react";
-import { prazoCor, fmtDate } from "@/lib/acao-helpers";
-import { differenceInDays, parseISO } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import {
+  labelTipoNotificacao,
+  listarNotificacoes,
+  marcarTodasNotificacoesComoLidas,
+  marcarNotificacaoComoLida,
+  type Notificacao,
+} from "@/lib/notificacoes";
 
 export const Route = createFileRoute("/_authenticated/notificacoes")({
   head: () => ({ meta: [{ title: "Central de Notificações — SIGOV-SISPREV" }] }),
@@ -14,84 +18,152 @@ export const Route = createFileRoute("/_authenticated/notificacoes")({
 });
 
 function Notificacoes() {
-  const { user } = useAuth();
+  const queryClient = useQueryClient();
 
-  const { data: acoes, isLoading } = useQuery({
-    queryKey: ["notif-acoes", user?.id],
-    queryFn: async () => (await supabase.from("acoes")
-      .select("*, area:areas(nome), responsavel:profiles!acoes_responsavel_id_fkey(nome)")
-      .neq("status", "concluida").neq("status", "cancelada")).data ?? [],
+  const { data: notificacoes = [], isLoading } = useQuery({
+    queryKey: ["notificacoes"],
+    queryFn: () => listarNotificacoes(100),
+    staleTime: 1000 * 60 * 5,
   });
 
-  if (isLoading) return <div className="flex justify-center p-12"><Loader2 className="animate-spin" /></div>;
+  const markRead = useMutation({
+    mutationFn: marcarNotificacaoComoLida,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
+      void queryClient.invalidateQueries({ queryKey: ["notificacoes-resumo"] });
+    },
+  });
 
-  const todas = acoes ?? [];
-  const vencidas = todas.filter((a) => a.prazo_final && differenceInDays(parseISO(a.prazo_final), new Date()) < 0);
-  const em3 = todas.filter((a) => { if (!a.prazo_final) return false; const d = differenceInDays(parseISO(a.prazo_final), new Date()); return d >= 0 && d <= 3; });
-  const em7 = todas.filter((a) => { if (!a.prazo_final) return false; const d = differenceInDays(parseISO(a.prazo_final), new Date()); return d > 3 && d <= 7; });
-  const em30 = todas.filter((a) => { if (!a.prazo_final) return false; const d = differenceInDays(parseISO(a.prazo_final), new Date()); return d > 7 && d <= 30; });
+  const markAllRead = useMutation({
+    mutationFn: marcarTodasNotificacoesComoLidas,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
+      void queryClient.invalidateQueries({ queryKey: ["notificacoes-resumo"] });
+    },
+  });
+
+  const unreadCount = notificacoes.filter((item) => !item.lida).length;
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2"><Bell className="h-6 w-6 text-primary" /> Central de Notificações</h1>
-        <p className="text-sm text-muted-foreground">Alertas moderados de prazos do Plano de Ação e Pró-Gestão RPPS.</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold">
+            <Bell className="h-6 w-6 text-primary" />
+            Central de Notificações
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Alertas internos sobre prazos, evidências e acesso de usuários.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={unreadCount > 0 ? "default" : "secondary"} className="w-fit">
+            {unreadCount} não lida{unreadCount === 1 ? "" : "s"}
+          </Badge>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => markAllRead.mutate()}
+            disabled={unreadCount === 0 || markAllRead.isPending}
+          >
+            <Check className="h-4 w-4" />
+            Marcar todas como lidas
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard label="Vencidas" value={vencidas.length} icon={AlertTriangle} tone="bg-foreground text-background" />
-        <KpiCard label="Em 3 dias" value={em3.length} icon={AlertTriangle} tone="bg-destructive/15 text-destructive" />
-        <KpiCard label="Em 7 dias" value={em7.length} icon={AlarmClock} tone="bg-warning/20 text-warning-foreground" />
-        <KpiCard label="Em 30 dias" value={em30.length} icon={CheckCircle2} tone="bg-info/15 text-info" />
-      </div>
-
-      <Section title="Vencidas" items={vencidas} />
-      <Section title="Vencendo em até 3 dias" items={em3} />
-      <Section title="Vencendo em até 7 dias" items={em7} />
-      <Section title="Vencendo em até 30 dias" items={em30} />
-
-      <Card className="p-4 bg-muted/30">
-        <p className="text-sm text-muted-foreground">
-          <strong>Política moderada de alertas:</strong> notificações são geradas apenas para ações com responsável e prazo definidos.
-          E-mails são enviados ao responsável 7 e 3 dias antes, no vencimento e a cada 15 dias de atraso (com escalonamento ao gestor e diretoria).
-          O sistema evita envios diários repetidos.
-        </p>
-      </Card>
+      {isLoading ? (
+        <div className="flex justify-center p-12">
+          <Loader2 className="animate-spin text-primary" />
+        </div>
+      ) : notificacoes.length === 0 ? (
+        <Card className="p-8 text-center">
+          <p className="font-medium">Nenhuma notificação encontrada.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Quando houver alertas, eles aparecerão aqui.</p>
+        </Card>
+      ) : (
+        <Card className="divide-y overflow-hidden">
+          {notificacoes.map((item) => (
+            <NotificationRow
+              key={item.id}
+              item={item}
+              onMarkRead={() => markRead.mutate(item.id)}
+              disabled={markRead.isPending || markAllRead.isPending}
+            />
+          ))}
+        </Card>
+      )}
     </div>
   );
 }
 
-function KpiCard({ label, value, icon: Icon, tone }: any) {
+function NotificationRow({
+  item,
+  onMarkRead,
+  disabled,
+}: {
+  item: Notificacao;
+  onMarkRead: () => void;
+  disabled: boolean;
+}) {
+  const content = (
+    <div className="min-w-0 flex-1 space-y-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant={item.lida ? "secondary" : "default"}>{labelTipoNotificacao(item.tipo)}</Badge>
+        {!item.lida && <span className="h-2 w-2 rounded-full bg-primary" />}
+        <span className="text-xs text-muted-foreground">{formatNotificationDate(item.created_at)}</span>
+      </div>
+      <p className="font-medium">{item.titulo}</p>
+      {item.mensagem && <p className="text-sm text-muted-foreground">{item.mensagem}</p>}
+    </div>
+  );
+
   return (
-    <Card className="p-4">
-      <div className={`inline-flex h-8 w-8 items-center justify-center rounded-md ${tone} mb-2`}><Icon className="h-4 w-4" /></div>
-      <p className="text-2xl font-bold">{value}</p>
-      <p className="text-xs text-muted-foreground">{label}</p>
-    </Card>
+    <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+      {item.acao_id ? (
+        <Link
+          to="/plano-acao/$id"
+          params={{ id: item.acao_id }}
+          className="min-w-0 flex-1 rounded-md outline-none transition hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {content}
+        </Link>
+      ) : (
+        content
+      )}
+
+      <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+        {item.acao_id && (
+          <Button asChild variant="outline" size="sm">
+            <Link to="/plano-acao/$id" params={{ id: item.acao_id }}>
+              Ver ação
+            </Link>
+          </Button>
+        )}
+        {!item.lida && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onMarkRead}
+          disabled={disabled}
+        >
+          <Check className="h-4 w-4" />
+          Marcar como lida
+        </Button>
+        )}
+      </div>
+    </div>
   );
 }
 
-function Section({ title, items }: { title: string; items: any[] }) {
-  if (items.length === 0) return null;
-  return (
-    <Card className="p-4">
-      <h3 className="font-semibold mb-3">{title} <span className="text-muted-foreground text-sm">({items.length})</span></h3>
-      <ul className="space-y-2">
-        {items.map((a) => {
-          const pz = prazoCor(a.prazo_final, a.status);
-          return (
-            <li key={a.id}>
-              <Link to="/plano-acao/$id" params={{ id: a.id }} className="flex items-center justify-between gap-3 p-3 border rounded-md hover:bg-accent">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{a.titulo}</p>
-                  <p className="text-xs text-muted-foreground">{a.responsavel?.nome ?? "Sem responsável"} · {a.area?.nome ?? "—"} · {fmtDate(a.prazo_final)}</p>
-                </div>
-                <Badge className={pz.color}>{pz.label}</Badge>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </Card>
-  );
+function formatNotificationDate(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }

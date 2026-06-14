@@ -1,7 +1,14 @@
-import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
+import { Link, Outlet, useLocation } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type ComponentType } from "react";
 import { useAuth } from "@/lib/auth";
 import { canAccessModule, type PermissionLevel } from "@/lib/permissions";
+import {
+  labelTipoNotificacao,
+  listarResumoNotificacoes,
+  marcarNotificacaoComoLida,
+  type Notificacao,
+} from "@/lib/notificacoes";
 import {
   LayoutDashboard,
   ClipboardCheck,
@@ -23,6 +30,9 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface NavItem {
   to: string;
@@ -61,7 +71,6 @@ export function AppLayout() {
   const { user, signOut, permissionLevel } = useAuth();
   const [open, setOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const navigate = useNavigate();
   const location = useLocation();
 
   const initials = (user?.user_metadata?.nome || user?.email || "U")
@@ -172,9 +181,7 @@ export function AppLayout() {
             <Menu className="h-5 w-5" />
           </Button>
           <div className="flex-1" />
-          <Button variant="ghost" size="icon" onClick={() => navigate({ to: "/notificacoes" })}>
-            <Bell className="h-5 w-5" />
-          </Button>
+          <NotificationBell />
           <div className="hidden sm:flex flex-col items-end mr-2">
             <p className="text-sm font-medium">{user?.user_metadata?.nome || user?.email}</p>
             <p className="text-[11px] text-muted-foreground">{user?.email}</p>
@@ -194,6 +201,137 @@ export function AppLayout() {
       </div>
     </div>
   );
+}
+
+function NotificationBell() {
+  const queryClient = useQueryClient();
+  const { user, permissionLevel } = useAuth();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["notificacoes-resumo", user?.id, permissionLevel],
+    queryFn: listarResumoNotificacoes,
+    enabled: Boolean(user?.id),
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const markRead = useMutation({
+    mutationFn: marcarNotificacaoComoLida,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["notificacoes-resumo"] });
+      void queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
+    },
+  });
+
+  const count = data?.count ?? 0;
+  const items = data?.items ?? [];
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="icon" className="relative" aria-label="Notificações">
+          <Bell className="h-5 w-5" />
+          {count > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-none text-destructive-foreground">
+              {count > 99 ? "99+" : count}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-0">
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold">Notificações</p>
+            <p className="text-xs text-muted-foreground">
+              {count > 0 ? `${count} alerta${count === 1 ? "" : "s"} não lido${count === 1 ? "" : "s"}` : "Nenhum alerta pendente"}
+            </p>
+          </div>
+          {isLoading && <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />}
+        </div>
+
+        <ScrollArea className="max-h-80">
+          {items.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+              Tudo em dia por aqui.
+            </div>
+          ) : (
+            <div className="divide-y">
+              {items.map((item) => (
+                <NotificationPreview
+                  key={item.id}
+                  item={item}
+                  onMarkRead={() => markRead.mutate(item.id)}
+                  disabled={markRead.isPending}
+                />
+              ))}
+            </div>
+          )}
+        </ScrollArea>
+
+        <div className="border-t p-2">
+          <Button asChild variant="ghost" className="w-full justify-center">
+            <Link to="/notificacoes">Ver central</Link>
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function NotificationPreview({
+  item,
+  onMarkRead,
+  disabled,
+}: {
+  item: Notificacao;
+  onMarkRead: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-2 px-4 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+            {labelTipoNotificacao(item.tipo)}
+          </Badge>
+          <p className="line-clamp-2 text-sm font-medium">{item.titulo}</p>
+          {item.mensagem && (
+            <p className="line-clamp-2 text-xs text-muted-foreground">{item.mensagem}</p>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] text-muted-foreground">{formatNotificationDate(item.created_at)}</span>
+        <div className="flex items-center gap-1">
+          {item.acao_id && (
+            <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
+              <Link to="/plano-acao/$id" params={{ id: item.acao_id }}>
+                Ver ação
+              </Link>
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={onMarkRead}
+            disabled={disabled}
+          >
+            Marcar como lida
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatNotificationDate(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 function NavGroup({
